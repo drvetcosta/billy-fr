@@ -1,4 +1,4 @@
-const BILL_TRACKER_VERSION = "0.4.1";
+const BILL_TRACKER_VERSION = "0.4.3";
 
 class BillTrackerCard extends HTMLElement {
   constructor() {
@@ -12,6 +12,8 @@ class BillTrackerCard extends HTMLElement {
     this._formOpen = false;
     this._error = null;
     this._chartMode = "cashflow";
+    this._allBillsOpen = false;
+    this._allBillsCategory = "all";
     this._unsubscribe = null;
   }
 
@@ -384,7 +386,12 @@ class BillTrackerCard extends HTMLElement {
     const formPayers = this._expenseFormPayers(editing);
     const defaultPayerId = editing?.payer_id || selectedCategory?.default_payer_id || activePayers[0]?.id || "";
     const splitMap = this._splitMap(editing?.split?.length ? editing.split : this._data.default_split || []);
-    const expenses = (this._data.expenses || []).slice(0, this._config.recent);
+    const allExpenses = this._data.expenses || [];
+    const expenses = allExpenses.slice(0, this._config.recent);
+    const allBillCategories = (this._data.categories || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), "it"));
+    const filteredAllExpenses = this._allBillsCategory === "all"
+      ? allExpenses
+      : allExpenses.filter((x) => x.category_id === this._allBillsCategory);
     const settlements = (this._data.settlements || []).slice(0, 5);
     const upcoming = (this._data.upcoming || []).slice(0, 8);
 
@@ -428,6 +435,21 @@ class BillTrackerCard extends HTMLElement {
         .warning { padding:10px 12px; border-radius:10px; border:1px solid var(--warning-color,#f0ad4e); margin-bottom:12px; }
         .section { margin-top:16px; }
         .section-title { font-size:15px; font-weight:600; margin-bottom:8px; }
+        .section-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
+        .section-head .section-title { margin-bottom:0; }
+        .all-bills-panel { margin-top:14px; padding:14px; border:1px solid var(--divider-color); border-radius:12px; background:var(--card-background-color); }
+        .all-bills-toolbar { display:flex; gap:10px; align-items:end; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; }
+        .all-bills-toolbar label { min-width:220px; }
+        .all-bills-count { color:var(--secondary-text-color); font-size:12px; }
+        .all-bills-list { max-height:620px; overflow:auto; padding-right:3px; }
+        .all-row { display:grid; grid-template-columns:42px 125px minmax(180px,1fr) 120px auto; gap:10px; align-items:center; padding:10px 0; border-bottom:1px solid var(--divider-color); }
+        .all-row:last-child { border-bottom:0; }
+        .paid-toggle { display:flex; align-items:center; justify-content:center; cursor:pointer; }
+        .paid-toggle input { position:absolute; opacity:0; pointer-events:none; }
+        .paid-toggle-mark { width:28px; height:28px; border-radius:8px; border:2px solid var(--divider-color); display:inline-flex; align-items:center; justify-content:center; box-sizing:border-box; font-weight:800; font-size:18px; color:transparent; transition:background .15s,border-color .15s,color .15s; }
+        .paid-toggle input:checked + .paid-toggle-mark { background:var(--success-color,#43a047); border-color:var(--success-color,#43a047); color:white; }
+        .paid-toggle input:focus-visible + .paid-toggle-mark { outline:2px solid var(--primary-color); outline-offset:2px; }
+        .paid-toggle input:disabled + .paid-toggle-mark { opacity:.5; cursor:wait; }
         .settle-box { border:1px solid var(--divider-color); border-radius:12px; padding:12px; }
         .settle-empty { color:var(--secondary-text-color); padding:8px 2px; }
         .settle-empty.ok { color:var(--success-color,#43a047); font-weight:600; }
@@ -468,8 +490,8 @@ class BillTrackerCard extends HTMLElement {
         .settlement { display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid var(--divider-color); }
         .settlement span { color:var(--secondary-text-color); font-size:12px; }
         @media (max-width:1000px) { .stats { grid-template-columns:repeat(3,minmax(0,1fr)); } .debt-row { grid-template-columns:1fr auto; } .debt-actions { grid-column:1 / -1; } }
-        @media (max-width:760px) { .stats { grid-template-columns:repeat(2,minmax(0,1fr)); } form { grid-template-columns:1fr 1fr; } .wide,.split-box,.form-help,.buttons { grid-column:1 / -1; } }
-        @media (max-width:560px) { ha-card { padding:13px; } .stats { grid-template-columns:1fr; } form { grid-template-columns:1fr; } .wide,.split-box,.form-help,.buttons { grid-column:1; } .row { grid-template-columns:1fr auto; } .row .amount { grid-column:1; text-align:left; } .row .actions { grid-column:2; grid-row:1 / span 2; } .debt-row { grid-template-columns:1fr; } .debt-actions { grid-column:1; } .settlement { grid-template-columns:1fr auto; } }
+        @media (max-width:760px) { .stats { grid-template-columns:repeat(2,minmax(0,1fr)); } form { grid-template-columns:1fr 1fr; } .wide,.split-box,.form-help,.buttons { grid-column:1 / -1; } .all-row { grid-template-columns:42px 110px 1fr auto; } .all-row .amount { grid-column:3; text-align:left; } .all-row .actions { grid-column:4; grid-row:1 / span 2; } }
+        @media (max-width:560px) { ha-card { padding:13px; } .stats { grid-template-columns:1fr; } form { grid-template-columns:1fr; } .wide,.split-box,.form-help,.buttons { grid-column:1; } .row { grid-template-columns:1fr auto; } .row .amount { grid-column:1; text-align:left; } .row .actions { grid-column:2; grid-row:1 / span 2; } .debt-row { grid-template-columns:1fr; } .debt-actions { grid-column:1; } .settlement { grid-template-columns:1fr auto; } .all-bills-toolbar label { min-width:100%; } .all-row { grid-template-columns:36px 1fr auto; } .all-row .all-date { grid-column:2; } .all-row .all-main { grid-column:2; } .all-row .amount { grid-column:2; text-align:left; } .all-row .actions { grid-column:3; grid-row:1 / span 3; } }
       </style>
       <ha-card>
         <div class="head">
@@ -533,14 +555,40 @@ class BillTrackerCard extends HTMLElement {
 
         ${settlements.length ? `<div class="section"><div class="section-title">Rimborsi recenti</div>${settlements.map((x) => `<div class="settlement"><div><strong>${this._escape(x.from_name)} → ${this._escape(x.to_name)}</strong><span>${new Date(x.created_at).toLocaleString("it-IT")}${x.note ? ` · ${this._escape(x.note)}` : ""}</span></div><b>${this._money(x.amount)}</b><button class="icon delete-settlement" type="button" data-id="${this._escape(x.id)}" title="Annulla rimborso">×</button></div>`).join("")}</div>` : ""}
 
-        <div class="section"><div class="section-title">Ultime bollette</div><div class="list">
-          ${expenses.length ? expenses.map((x) => `<div class="row">
-            <div><strong>${this._monthLabel(x.paid_year, x.paid_month)}</strong><div class="date">${this._escape(this._periodText(x))}</div></div>
-            <div><strong>${this._escape(x.category)}</strong><div class="payer-line">${x.payer ? `Pagatore: ${this._escape(x.payer)} · ` : ""}${this._escape(this._splitText(x))}</div>${x.note ? `<div class="note">${this._escape(x.note)}</div>` : ""}</div>
-            <div class="amount"><span class="paid-status ${x.paid ? "yes" : "no"}" title="${x.paid ? "Bolletta pagata" : "Bolletta non pagata"}" aria-label="${x.paid ? "Bolletta pagata" : "Bolletta non pagata"}">✓</span> ${this._money(x.amount)}</div>
-            <div class="actions"><button class="icon edit" type="button" data-id="${this._escape(x.id)}" title="Modifica">✎</button><button class="icon delete" type="button" data-id="${this._escape(x.id)}" title="Elimina">×</button></div>
-          </div>`).join("") : '<div class="msg">Nessuna bolletta inserita.</div>'}
-        </div></div>
+        <div class="section">
+          <div class="section-head"><div class="section-title">Ultime bollette</div><button class="secondary small" id="open-all-bills" type="button">${this._allBillsOpen ? "Chiudi elenco completo" : `Tutte le bollette (${allExpenses.length})`}</button></div>
+          <div class="list">
+            ${expenses.length ? expenses.map((x) => `<div class="row">
+              <div><strong>${this._monthLabel(x.paid_year, x.paid_month)}</strong><div class="date">${this._escape(this._periodText(x))}</div></div>
+              <div><strong>${this._escape(x.category)}</strong><div class="payer-line">${x.payer ? `Pagatore: ${this._escape(x.payer)} · ` : ""}${this._escape(this._splitText(x))}</div>${x.note ? `<div class="note">${this._escape(x.note)}</div>` : ""}</div>
+              <div class="amount"><span class="paid-status ${x.paid ? "yes" : "no"}" title="${x.paid ? "Bolletta pagata" : "Bolletta non pagata"}" aria-label="${x.paid ? "Bolletta pagata" : "Bolletta non pagata"}">✓</span> ${this._money(x.amount)}</div>
+              <div class="actions"><button class="icon edit" type="button" data-id="${this._escape(x.id)}" title="Modifica">✎</button><button class="icon delete" type="button" data-id="${this._escape(x.id)}" title="Elimina">×</button></div>
+            </div>`).join("") : '<div class="msg">Nessuna bolletta inserita.</div>'}
+          </div>
+          ${this._allBillsOpen ? `<div class="all-bills-panel">
+            <div class="all-bills-toolbar">
+              <label>Filtra per tipo
+                <select id="all-bills-category">
+                  <option value="all" ${this._allBillsCategory === "all" ? "selected" : ""}>Tutti i tipi</option>
+                  ${allBillCategories.map((c) => `<option value="${this._escape(c.id)}" ${c.id === this._allBillsCategory ? "selected" : ""}>${this._escape(c.name)}</option>`).join("")}
+                </select>
+              </label>
+              <div class="all-bills-count">${filteredAllExpenses.length} ${filteredAllExpenses.length === 1 ? "bolletta" : "bollette"}</div>
+            </div>
+            <div class="all-bills-list">
+              ${filteredAllExpenses.length ? filteredAllExpenses.map((x) => `<div class="all-row">
+                <label class="paid-toggle" title="${x.paid ? "Segna come non pagata" : "Segna come pagata"}">
+                  <input class="bill-paid-toggle" type="checkbox" data-id="${this._escape(x.id)}" ${x.paid ? "checked" : ""} aria-label="${x.paid ? "Bolletta pagata" : "Bolletta non pagata"}">
+                  <span class="paid-toggle-mark">✓</span>
+                </label>
+                <div class="all-date"><strong>${this._monthLabel(x.paid_year, x.paid_month)}</strong><div class="date">${this._escape(this._periodText(x))}</div></div>
+                <div class="all-main"><strong>${this._escape(x.category)}</strong><div class="payer-line">${x.payer ? `Pagatore: ${this._escape(x.payer)} · ` : ""}${this._escape(this._splitText(x))}</div>${x.note ? `<div class="note">${this._escape(x.note)}</div>` : ""}</div>
+                <div class="amount">${this._money(x.amount)}</div>
+                <div class="actions"><button class="icon edit" type="button" data-id="${this._escape(x.id)}" title="Modifica">✎</button><button class="icon delete" type="button" data-id="${this._escape(x.id)}" title="Elimina">×</button></div>
+              </div>`).join("") : '<div class="msg">Nessuna bolletta per questo filtro.</div>'}
+            </div>
+          </div>` : ""}
+        </div>
       </ha-card>`;
 
     this.shadowRoot.getElementById("open-form")?.addEventListener("click", () => {
@@ -563,6 +611,15 @@ class BillTrackerCard extends HTMLElement {
       this._chartMode = btn.dataset.mode === "normalized" ? "normalized" : "cashflow";
       this._render();
     }));
+    this.shadowRoot.getElementById("open-all-bills")?.addEventListener("click", () => {
+      this._allBillsOpen = !this._allBillsOpen;
+      this._render();
+    });
+    this.shadowRoot.getElementById("all-bills-category")?.addEventListener("change", (event) => {
+      this._allBillsCategory = event.target.value || "all";
+      this._render();
+    });
+    this.shadowRoot.querySelectorAll(".bill-paid-toggle").forEach((input) => input.addEventListener("change", () => this._togglePaid(input)));
     this.shadowRoot.querySelectorAll(".edit").forEach((btn) => btn.addEventListener("click", () => this._startEdit(btn.dataset.id)));
     this.shadowRoot.querySelectorAll(".delete").forEach((btn) => btn.addEventListener("click", () => this._delete(btn.dataset.id)));
     this.shadowRoot.querySelectorAll(".settle").forEach((btn) => btn.addEventListener("click", () => this._settle(btn)));
@@ -653,6 +710,23 @@ class BillTrackerCard extends HTMLElement {
       this._error = null;
       await this._load();
     } catch (err) {
+      this._error = String(err?.message || err);
+      this._render();
+    }
+  }
+
+  async _togglePaid(input) {
+    if (!this._hass || !input) return;
+    const id = input.dataset.id;
+    const paid = Boolean(input.checked);
+    input.disabled = true;
+    try {
+      await this._hass.callWS({ type: "bill_tracker/set_paid", expense_id: id, paid });
+      this._error = null;
+      await this._load();
+    } catch (err) {
+      input.checked = !paid;
+      input.disabled = false;
       this._error = String(err?.message || err);
       this._render();
     }

@@ -28,6 +28,7 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         ws_add,
         ws_delete,
         ws_update,
+        ws_set_paid,
         ws_category_add,
         ws_category_update,
         ws_category_delete,
@@ -152,6 +153,26 @@ async def ws_update(hass, connection, msg):
         item = await _manager(hass).async_update(msg["expense_id"], **_expense_kwargs(msg))
     except (ValueError, RuntimeError) as err:
         connection.send_error(msg["id"], "invalid_expense", str(err))
+        return
+    if item is None:
+        connection.send_error(msg["id"], "not_found", "Spesa non trovata")
+        return
+    connection.send_result(msg["id"], item)
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "bill_tracker/set_paid",
+        vol.Required("expense_id"): str,
+        vol.Required("paid"): bool,
+    }
+)
+@websocket_api.async_response
+async def ws_set_paid(hass, connection, msg):
+    try:
+        item = await _manager(hass).async_set_paid(msg["expense_id"], msg["paid"])
+    except RuntimeError as err:
+        connection.send_error(msg["id"], "not_configured", str(err))
         return
     if item is None:
         connection.send_error(msg["id"], "not_found", "Spesa non trovata")

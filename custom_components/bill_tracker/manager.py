@@ -347,6 +347,16 @@ class BillTrackerManager:
             return self._public_expense(item)
         return None
 
+    async def async_set_paid(self, expense_id: str, paid: bool) -> dict[str, Any] | None:
+        """Set only the payment status of an expense without rewriting its other fields."""
+        for item in self.expenses:
+            if item.get("id") != expense_id:
+                continue
+            item["paid"] = bool(paid)
+            await self._save_and_notify()
+            return self._public_expense(item)
+        return None
+
     async def async_delete(self, expense_id: str) -> bool:
         before = len(self.expenses)
         self.expenses = [x for x in self.expenses if x.get("id") != expense_id]

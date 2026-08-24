@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.4.3
+
+### Complete bill history and quick payment status
+
+- Added **Tutte le bollette** next to the recent-bills section.
+- The complete history can be filtered by bill type, including disabled types that still have history.
+- Every item in the complete list has an interactive payment checkmark.
+- Toggling the checkmark saves `paid` immediately without opening the edit form.
+- Added a dedicated `bill_tracker/set_paid` WebSocket command so changing payment status never rewrites amount, category, payer, split or competence period.
+- Recent bills keep the read-only green checkmark for paid entries.
+- Payment status changes immediately recalculate unpaid totals, payment charts and payer reimbursements.
+
 ## 0.4.2
 
 ### Outstanding balance fix
