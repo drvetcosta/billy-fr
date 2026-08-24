@@ -2,8 +2,9 @@
 
 Billy is a HACS custom integration for keeping a persistent history of household bills directly in Home Assistant. It supports recurring bills, competence periods, normalized monthly costs, forecasts and bill splitting between multiple payers.
 
-## v0.4.1 features
+## v0.4.2 features
 
+- **Bollette da pagare** sums only unpaid bills; paid bills are excluded from this balance. Split reimbursements between payers are tracked separately.
 ### Bills and forecasts
 
 - Add, edit and delete bills from a Lovelace card.

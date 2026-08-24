@@ -484,7 +484,7 @@ class BillTrackerCard extends HTMLElement {
           <div class="stat"><span>Media pagamenti 6 mesi</span><strong>${this._money(summary.average_6_months)}</strong></div>
           <div class="stat"><span>Stima prossimo mese</span><strong>${this._money(summary.next_month_estimate)}</strong></div>
           <div class="stat"><span>Costo mensile normalizzato</span><strong>${this._money(summary.normalized_current_month)}</strong></div>
-          <div class="stat"><span>Saldo ancora da regolare</span><strong>${this._money(summary.outstanding_total)}</strong></div>
+          <div class="stat"><span>Bollette da pagare</span><strong>${this._money(summary.unpaid_total ?? summary.outstanding_total)}</strong></div>
         </div>
         ${!activeCategories.length ? '<div class="warning">Nessun tipo di bolletta attivo. Apri <strong>Impostazioni</strong> e abilita o aggiungi almeno una voce.</div>' : ""}
         ${(this._formOpen || editing) ? `<form id="expense-form">
@@ -516,7 +516,7 @@ class BillTrackerCard extends HTMLElement {
         </form>` : ""}
         ${this._error ? `<div class="msg error">${this._escape(this._error)}</div>` : ""}
 
-        <div class="section"><div class="section-title">Da regolare</div><div class="settle-box">${this._renderDebts()}</div></div>
+        <div class="section"><div class="section-title">Rimborsi tra paganti</div><div class="settle-box">${this._renderDebts()}</div></div>
 
         <div class="chart-panel">
           <div class="chart-head">

@@ -614,6 +614,11 @@ class BillTrackerManager:
         avg6 = round(mean(past_values[-min(6, len(past_values)):]), 2) if past_values else 0.0
         future = self.forecast(12)
         debts = self.debts()
+        unpaid_total = round(
+            sum(float(x.get("amount", 0.0)) for x in self.expenses if not bool(x.get("paid", False))),
+            2,
+        )
+        reimbursement_total = round(sum(float(x["amount"]) for x in debts), 2)
         return {
             "current_month": round(float(current["total"]), 2) if current else 0.0,
             "average_6_months": avg6,
@@ -625,7 +630,12 @@ class BillTrackerManager:
             "unpaid_entries": sum(1 for x in self.expenses if not bool(x.get("paid", False))),
             "active_categories": sum(1 for x in self.categories if x.get("enabled", True)),
             "active_payers": sum(1 for x in self.payers if x.get("enabled", True)),
-            "outstanding_total": round(sum(float(x["amount"]) for x in debts), 2),
+            # Outstanding bill balance: paid bills are explicitly excluded.
+            "outstanding_total": unpaid_total,
+            "unpaid_total": unpaid_total,
+            # Person-to-person reimbursements are a separate concept. They are
+            # generated only after a bill has actually been paid by a payer.
+            "reimbursement_total": reimbursement_total,
         }
 
     # ------------------------------------------------------------------

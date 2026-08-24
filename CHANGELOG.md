@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.4.2
+
+### Outstanding balance fix
+
+- Fixed the dashboard balance logic: **Bollette da pagare** now sums only bills where `paid = false`.
+- Paid bills are excluded from the outstanding bill balance.
+- Person-to-person split reimbursements remain separate and are shown under **Rimborsi tra paganti**.
+- Added separate `unpaid_total` and `reimbursement_total` summary attributes; `outstanding_total` now follows the unpaid-bills meaning for compatibility with the dashboard.
+
 ## 0.4.1
 
 ### Explicit bill payment status
