@@ -2,7 +2,7 @@
 
 Billy is a HACS custom integration for keeping a persistent history of household bills directly in Home Assistant. It supports recurring bills, competence periods, normalized monthly costs, forecasts and bill splitting between multiple payers.
 
-## v0.4.0 features
+## v0.4.1 features
 
 ### Bills and forecasts
 
@@ -36,6 +36,11 @@ Billy calculates a net balance between payers. If one person paid most bills whi
 When the creditor has PayPal.Me configured, the dashboard shows **Pay with PayPal** and opens PayPal.Me with the exact outstanding EUR amount already filled in. Billy does not verify the external PayPal payment; use **Mark as settled** after the payment is completed.
 
 Settlement history is stored locally and can be reversed if it was recorded by mistake.
+
+
+### Payment status
+
+Every bill has an explicit **Paid** checkbox. The configured payer and the payment status are independent: selecting a payer does not automatically mark the bill as paid. New bills are unpaid by default, and older databases migrate missing payment status as unpaid. Only paid bills contribute to split balances and the Payments cash-flow view. Paid entries show a checkmark in the recent-bills list.
 
 ## HACS installation
 

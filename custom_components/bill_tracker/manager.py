@@ -264,6 +264,7 @@ class BillTrackerManager:
         period_end_month: int | None = None,
         payer_id: str | None = None,
         split: list[dict[str, Any]] | None = None,
+        paid: bool = False,
     ) -> dict[str, Any]:
         category = self._resolve_category(category_id, category_name)
         self._validate_date(year, month)
@@ -286,6 +287,7 @@ class BillTrackerManager:
             "period_end_month": em,
             "payer_id": resolved_payer,
             "split": normalized_split,
+            "paid": bool(paid),
             "note": note.strip(),
             "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         }
@@ -310,6 +312,7 @@ class BillTrackerManager:
         period_end_month: int | None = None,
         payer_id: str | None = None,
         split: list[dict[str, Any]] | None = None,
+        paid: bool | None = None,
     ) -> dict[str, Any] | None:
         category = self._resolve_category(category_id, category_name)
         self._validate_date(year, month)
@@ -335,6 +338,7 @@ class BillTrackerManager:
                     "period_end_month": em,
                     "payer_id": resolved_payer,
                     "split": normalized_split,
+                    "paid": bool(paid) if paid is not None else bool(item.get("paid", False)),
                     "note": note.strip(),
                 }
             )
@@ -404,6 +408,8 @@ class BillTrackerManager:
         """Return net position by payer. Positive means they should receive money."""
         positions: dict[str, float] = {str(x["id"]): 0.0 for x in self.payers}
         for item in self.expenses:
+            if not bool(item.get("paid", False)):
+                continue
             payer_id = str(item.get("payer_id") or "")
             if payer_id not in positions:
                 continue
@@ -501,7 +507,11 @@ class BillTrackerManager:
             return []
         buckets: dict[tuple[int, int], dict[str, float]] = defaultdict(lambda: defaultdict(float))
         for item in self.expenses:
+            if not bool(item.get("paid", False)):
+                continue
             buckets[(int(item["paid_year"]), int(item["paid_month"]))][str(item["category_id"])] += float(item["amount"])
+        if not buckets:
+            return []
         first = min(buckets)
         today = date.today()
         last = max(max(buckets), (today.year, today.month))
@@ -609,8 +619,10 @@ class BillTrackerManager:
             "average_6_months": avg6,
             "next_month_estimate": future[0]["total"] if future else 0.0,
             "normalized_current_month": round(float(normalized_current["total"]), 2) if normalized_current else 0.0,
-            "year_total": round(sum(float(x["amount"]) for x in self.expenses if int(x["paid_year"]) == today.year), 2),
+            "year_total": round(sum(float(x["amount"]) for x in self.expenses if int(x["paid_year"]) == today.year and bool(x.get("paid", False))), 2),
             "entries": len(self.expenses),
+            "paid_entries": sum(1 for x in self.expenses if bool(x.get("paid", False))),
+            "unpaid_entries": sum(1 for x in self.expenses if not bool(x.get("paid", False))),
             "active_categories": sum(1 for x in self.categories if x.get("enabled", True)),
             "active_payers": sum(1 for x in self.payers if x.get("enabled", True)),
             "outstanding_total": round(sum(float(x["amount"]) for x in debts), 2),
@@ -878,6 +890,9 @@ class BillTrackerManager:
                 "period_start_year": sy, "period_start_month": sm,
                 "period_end_year": ey, "period_end_month": em,
                 "payer_id": payer_id, "split": split,
+                # v0.4.0 and older had no explicit payment status. Never infer it:
+                # migrated historical bills are unpaid until the user checks them.
+                "paid": bool(item.get("paid", False)),
                 "note": str(item.get("note", "")).strip(),
                 "created_at": str(item.get("created_at") or datetime.now().astimezone().isoformat(timespec="seconds")),
             }

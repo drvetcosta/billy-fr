@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.4.1
+
+### Explicit bill payment status
+
+- Added an explicit **Bolletta pagata** checkbox to the add/edit form.
+- New bills default to unpaid until the checkbox is selected.
+- Existing v0.4.0 and older bills migrate as unpaid when no explicit status exists; editing them does not mark them paid automatically.
+- Recent bills show a green checkmark only when they are marked paid.
+- “Pagata da” is now treated as the configured payer/advance owner, independently from the paid/unpaid status.
+- Only paid bills affect payer balances and outstanding split debts.
+- The **Pagamenti** monthly series and “Pagato questo mese” summary include only bills explicitly marked paid.
+- Forecasting and normalized competence costs continue to use the bill history regardless of payment status.
+- Storage schema upgraded to v5.
+
 ## 0.4.0
 
 ### Bill splitting and payers

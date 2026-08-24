@@ -110,6 +110,7 @@ _EXPENSE_SCHEMA = {
     vol.Optional("period_end_month"): vol.All(vol.Coerce(int), vol.Range(min=1, max=12)),
     vol.Optional("payer_id"): str,
     vol.Optional("split"): [_SPLIT_ITEM_SCHEMA],
+    vol.Optional("paid"): bool,
 }
 
 
@@ -127,6 +128,7 @@ def _expense_kwargs(msg):
         "period_end_month": msg.get("period_end_month"),
         "payer_id": msg.get("payer_id"),
         "split": msg.get("split"),
+        "paid": msg.get("paid"),
     }
 
 

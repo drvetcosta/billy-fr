@@ -1,4 +1,4 @@
-const BILL_TRACKER_VERSION = "0.4.0";
+const BILL_TRACKER_VERSION = "0.4.1";
 
 class BillTrackerCard extends HTMLElement {
   constructor() {
@@ -409,6 +409,12 @@ class BillTrackerCard extends HTMLElement {
         label { display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--secondary-text-color); min-width:0; }
         .wide,.split-box,.form-help,.buttons { grid-column:1 / -1; }
         select,input { box-sizing:border-box; width:100%; min-height:44px; border-radius:10px; border:1px solid var(--divider-color); background:var(--card-background-color); color:var(--primary-text-color); padding:8px 10px; font-size:16px; }
+        .paid-check { grid-column:1 / -1; display:flex; flex-direction:row; align-items:center; gap:10px; min-height:44px; color:var(--primary-text-color); font-size:13px; }
+        .paid-check input { width:20px; min-height:20px; height:20px; margin:0; padding:0; accent-color:var(--success-color,#43a047); }
+        .paid-check span { color:var(--secondary-text-color); font-size:12px; }
+        .paid-status { width:28px; height:28px; border-radius:50%; display:inline-flex; align-items:center; justify-content:center; font-size:17px; font-weight:700; }
+        .paid-status.yes { color:var(--success-color,#43a047); background:color-mix(in srgb,var(--success-color,#43a047) 14%,transparent); }
+        .paid-status.no { visibility:hidden; }
         .split-box { border-top:1px solid var(--divider-color); padding-top:10px; }
         .split-head { display:flex; justify-content:space-between; gap:8px; align-items:center; margin-bottom:8px; }
         .split-head strong { color:var(--primary-text-color); font-size:13px; }
@@ -490,6 +496,7 @@ class BillTrackerCard extends HTMLElement {
           </label>
           <label>Mese pagamento<input id="paid-month" type="month" required value="${this._escape(selectedPaid)}"></label>
           <label>Importo (€)<input id="amount" type="number" min="0" step="0.01" inputmode="decimal" required value="${editing ? this._escape(editing.amount) : ""}" placeholder="0,00"></label>
+          <label class="paid-check"><input id="paid-status" type="checkbox" ${editing?.paid ? "checked" : ""}><div><strong>Bolletta pagata</strong><span>Attiva il check solo quando la bolletta è stata effettivamente saldata.</span></div></label>
           ${formPayers.length ? `<label>Pagata da
             <select id="payer" required>
               ${formPayers.map((p) => `<option value="${this._escape(p.id)}" ${p.id === defaultPayerId ? "selected" : ""}>${this._escape(p.name)}${p.enabled ? "" : " · disattivato"}</option>`).join("")}
@@ -504,7 +511,7 @@ class BillTrackerCard extends HTMLElement {
               ${formPayers.map((p) => `<label>${this._escape(p.name)} (%)<input class="split-input" data-payer="${this._escape(p.id)}" type="number" min="0" max="100" step="0.01" value="${Number(splitMap[p.id] || 0)}"></label>`).join("")}
             </div>
           </div>` : '<div class="form-help">Nessun pagante configurato: la bolletta verrà salvata senza divisione. Puoi aggiungere i paganti dalle impostazioni.</div>'}
-          <div class="form-help">La periodicità precompila il periodo di competenza. Il pagatore predefinito viene scelto dalle impostazioni del tipo di bolletta.</div>
+          <div class="form-help">La periodicità precompila il periodo di competenza. “Pagata da” indica chi anticipa la spesa; il check “Bolletta pagata” decide se il pagamento è realmente avvenuto e solo le bollette pagate entrano nei saldi tra persone.</div>
           <div class="buttons"><button class="secondary" id="cancel" type="button">Annulla</button><button class="primary" type="submit">${editing ? "Salva modifiche" : "Aggiungi"}</button></div>
         </form>` : ""}
         ${this._error ? `<div class="msg error">${this._escape(this._error)}</div>` : ""}
@@ -529,8 +536,8 @@ class BillTrackerCard extends HTMLElement {
         <div class="section"><div class="section-title">Ultime bollette</div><div class="list">
           ${expenses.length ? expenses.map((x) => `<div class="row">
             <div><strong>${this._monthLabel(x.paid_year, x.paid_month)}</strong><div class="date">${this._escape(this._periodText(x))}</div></div>
-            <div><strong>${this._escape(x.category)}</strong><div class="payer-line">${x.payer ? `Pagata da ${this._escape(x.payer)} · ` : ""}${this._escape(this._splitText(x))}</div>${x.note ? `<div class="note">${this._escape(x.note)}</div>` : ""}</div>
-            <div class="amount">${this._money(x.amount)}</div>
+            <div><strong>${this._escape(x.category)}</strong><div class="payer-line">${x.payer ? `Pagatore: ${this._escape(x.payer)} · ` : ""}${this._escape(this._splitText(x))}</div>${x.note ? `<div class="note">${this._escape(x.note)}</div>` : ""}</div>
+            <div class="amount"><span class="paid-status ${x.paid ? "yes" : "no"}" title="${x.paid ? "Bolletta pagata" : "Bolletta non pagata"}" aria-label="${x.paid ? "Bolletta pagata" : "Bolletta non pagata"}">✓</span> ${this._money(x.amount)}</div>
             <div class="actions"><button class="icon edit" type="button" data-id="${this._escape(x.id)}" title="Modifica">✎</button><button class="icon delete" type="button" data-id="${this._escape(x.id)}" title="Elimina">×</button></div>
           </div>`).join("") : '<div class="msg">Nessuna bolletta inserita.</div>'}
         </div></div>
@@ -607,6 +614,7 @@ class BillTrackerCard extends HTMLElement {
     const amount = Number(this.shadowRoot.getElementById("amount")?.value);
     const note = this.shadowRoot.getElementById("note")?.value.trim() || "";
     const payerId = this.shadowRoot.getElementById("payer")?.value || undefined;
+    const paidFlag = Boolean(this.shadowRoot.getElementById("paid-status")?.checked);
     const split = [...this.shadowRoot.querySelectorAll(".split-input")]
       .map((input) => ({ payer_id: input.dataset.payer, percentage: Number(input.value || 0) }))
       .filter((x) => x.payer_id && x.percentage > 0);
@@ -630,6 +638,7 @@ class BillTrackerCard extends HTMLElement {
       period_start_month: start.month,
       period_end_year: end.year,
       period_end_month: end.month,
+      paid: paidFlag,
     };
     if (payerId) payload.payer_id = payerId;
     if (split.length) payload.split = split;
