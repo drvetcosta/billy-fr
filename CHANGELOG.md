@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.4.4
+
+- Editing a bill now opens in a centered modal instead of moving the shared add/edit form above the dashboard content.
+- The all-bills view keeps the active category filter and scroll context while editing.
+- The edit dialog can be closed with Annulla, the close button, the backdrop, or Escape.
+- Mobile edit view uses a bottom-aligned dialog for easier touch interaction.
+
 ## 0.4.3
 
 ### Complete bill history and quick payment status

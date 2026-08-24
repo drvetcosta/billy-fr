@@ -1,4 +1,4 @@
-const BILL_TRACKER_VERSION = "0.4.3";
+const BILL_TRACKER_VERSION = "0.4.4";
 
 class BillTrackerCard extends HTMLElement {
   constructor() {
@@ -395,6 +395,34 @@ class BillTrackerCard extends HTMLElement {
     const settlements = (this._data.settlements || []).slice(0, 5);
     const upcoming = (this._data.upcoming || []).slice(0, 8);
 
+    const expenseFormHtml = `<form id="expense-form">
+          <label>Tipo
+            <select id="category" required>
+              ${activeCategories.map((c) => `<option value="${this._escape(c.id)}" ${c.id === selectedCategoryId ? "selected" : ""}>${this._escape(c.name)} · ${this._escape(this._intervalLabel(c.interval_months))}</option>`).join("")}
+              ${editing && selectedCategory && !selectedCategory.enabled ? `<option value="${this._escape(selectedCategory.id)}" selected>${this._escape(selectedCategory.name)} · disattivata</option>` : ""}
+            </select>
+          </label>
+          <label>Mese pagamento<input id="paid-month" type="month" required value="${this._escape(selectedPaid)}"></label>
+          <label>Importo (€)<input id="amount" type="number" min="0" step="0.01" inputmode="decimal" required value="${editing ? this._escape(editing.amount) : ""}" placeholder="0,00"></label>
+          <label class="paid-check"><input id="paid-status" type="checkbox" ${editing?.paid ? "checked" : ""}><div><strong>Bolletta pagata</strong><span>Attiva il check solo quando la bolletta è stata effettivamente saldata.</span></div></label>
+          ${formPayers.length ? `<label>Pagata da
+            <select id="payer" required>
+              ${formPayers.map((p) => `<option value="${this._escape(p.id)}" ${p.id === defaultPayerId ? "selected" : ""}>${this._escape(p.name)}${p.enabled ? "" : " · disattivato"}</option>`).join("")}
+            </select>
+          </label>` : ""}
+          <label>Fine competenza<input id="period-end" type="month" required value="${this._escape(defaultEnd)}"></label>
+          <label>Inizio competenza<input id="period-start" type="month" required value="${this._escape(defaultStart)}"></label>
+          <label class="wide">Nota (opzionale)<input id="note" type="text" maxlength="120" value="${editing ? this._escape(editing.note || "") : ""}" placeholder="Es. conguaglio, rata, periodo fatturato..."></label>
+          ${formPayers.length ? `<div class="split-box">
+            <div class="split-head"><strong>Divisione della spesa</strong><span id="split-total" class="split-total"></span></div>
+            <div class="split-grid">
+              ${formPayers.map((p) => `<label>${this._escape(p.name)} (%)<input class="split-input" data-payer="${this._escape(p.id)}" type="number" min="0" max="100" step="0.01" value="${Number(splitMap[p.id] || 0)}"></label>`).join("")}
+            </div>
+          </div>` : '<div class="form-help">Nessun pagante configurato: la bolletta verrà salvata senza divisione. Puoi aggiungere i paganti dalle impostazioni.</div>'}
+          <div class="form-help">La periodicità precompila il periodo di competenza. “Pagata da” indica chi anticipa la spesa; il check “Bolletta pagata” decide se il pagamento è realmente avvenuto e solo le bollette pagate entrano nei saldi tra persone.</div>
+          <div class="buttons"><button class="secondary" id="cancel" type="button">Annulla</button><button class="primary" type="submit">${editing ? "Salva modifiche" : "Aggiungi"}</button></div>
+        </form>`;
+
     this.shadowRoot.innerHTML = `
       <style>
         :host { display:block; }
@@ -413,6 +441,13 @@ class BillTrackerCard extends HTMLElement {
         .stat span { display:block; color:var(--secondary-text-color); font-size:11px; line-height:1.25; }
         .stat strong { display:block; font-size:18px; margin-top:4px; overflow-wrap:anywhere; }
         form { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; padding:14px; margin-bottom:14px; border:1px solid var(--divider-color); border-radius:12px; }
+        .edit-modal { position:fixed; inset:0; z-index:1000; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(0,0,0,.52); box-sizing:border-box; }
+        .edit-modal-shell { width:min(820px,100%); max-height:calc(100vh - 48px); overflow:auto; background:var(--card-background-color); color:var(--primary-text-color); border-radius:16px; box-shadow:0 16px 50px rgba(0,0,0,.35); }
+        .edit-modal-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border-bottom:1px solid var(--divider-color); position:sticky; top:0; z-index:2; background:var(--card-background-color); }
+        .edit-modal-head strong { font-size:16px; }
+        .edit-modal-head span { display:block; margin-top:2px; color:var(--secondary-text-color); font-size:12px; }
+        .edit-modal-close { min-width:42px; width:42px; padding:0; font-size:22px; }
+        .edit-modal form { margin:0; border:0; border-radius:0; padding:16px; }
         label { display:flex; flex-direction:column; gap:5px; font-size:12px; color:var(--secondary-text-color); min-width:0; }
         .wide,.split-box,.form-help,.buttons { grid-column:1 / -1; }
         select,input { box-sizing:border-box; width:100%; min-height:44px; border-radius:10px; border:1px solid var(--divider-color); background:var(--card-background-color); color:var(--primary-text-color); padding:8px 10px; font-size:16px; }
@@ -491,7 +526,7 @@ class BillTrackerCard extends HTMLElement {
         .settlement span { color:var(--secondary-text-color); font-size:12px; }
         @media (max-width:1000px) { .stats { grid-template-columns:repeat(3,minmax(0,1fr)); } .debt-row { grid-template-columns:1fr auto; } .debt-actions { grid-column:1 / -1; } }
         @media (max-width:760px) { .stats { grid-template-columns:repeat(2,minmax(0,1fr)); } form { grid-template-columns:1fr 1fr; } .wide,.split-box,.form-help,.buttons { grid-column:1 / -1; } .all-row { grid-template-columns:42px 110px 1fr auto; } .all-row .amount { grid-column:3; text-align:left; } .all-row .actions { grid-column:4; grid-row:1 / span 2; } }
-        @media (max-width:560px) { ha-card { padding:13px; } .stats { grid-template-columns:1fr; } form { grid-template-columns:1fr; } .wide,.split-box,.form-help,.buttons { grid-column:1; } .row { grid-template-columns:1fr auto; } .row .amount { grid-column:1; text-align:left; } .row .actions { grid-column:2; grid-row:1 / span 2; } .debt-row { grid-template-columns:1fr; } .debt-actions { grid-column:1; } .settlement { grid-template-columns:1fr auto; } .all-bills-toolbar label { min-width:100%; } .all-row { grid-template-columns:36px 1fr auto; } .all-row .all-date { grid-column:2; } .all-row .all-main { grid-column:2; } .all-row .amount { grid-column:2; text-align:left; } .all-row .actions { grid-column:3; grid-row:1 / span 3; } }
+        @media (max-width:560px) { ha-card { padding:13px; } .edit-modal { padding:8px; align-items:flex-end; } .edit-modal-shell { max-height:calc(100vh - 16px); border-radius:16px 16px 8px 8px; } .stats { grid-template-columns:1fr; } form { grid-template-columns:1fr; } .wide,.split-box,.form-help,.buttons { grid-column:1; } .row { grid-template-columns:1fr auto; } .row .amount { grid-column:1; text-align:left; } .row .actions { grid-column:2; grid-row:1 / span 2; } .debt-row { grid-template-columns:1fr; } .debt-actions { grid-column:1; } .settlement { grid-template-columns:1fr auto; } .all-bills-toolbar label { min-width:100%; } .all-row { grid-template-columns:36px 1fr auto; } .all-row .all-date { grid-column:2; } .all-row .all-main { grid-column:2; } .all-row .amount { grid-column:2; text-align:left; } .all-row .actions { grid-column:3; grid-row:1 / span 3; } }
       </style>
       <ha-card>
         <div class="head">
@@ -509,33 +544,15 @@ class BillTrackerCard extends HTMLElement {
           <div class="stat"><span>Bollette da pagare</span><strong>${this._money(summary.unpaid_total ?? summary.outstanding_total)}</strong></div>
         </div>
         ${!activeCategories.length ? '<div class="warning">Nessun tipo di bolletta attivo. Apri <strong>Impostazioni</strong> e abilita o aggiungi almeno una voce.</div>' : ""}
-        ${(this._formOpen || editing) ? `<form id="expense-form">
-          <label>Tipo
-            <select id="category" required>
-              ${activeCategories.map((c) => `<option value="${this._escape(c.id)}" ${c.id === selectedCategoryId ? "selected" : ""}>${this._escape(c.name)} · ${this._escape(this._intervalLabel(c.interval_months))}</option>`).join("")}
-              ${editing && selectedCategory && !selectedCategory.enabled ? `<option value="${this._escape(selectedCategory.id)}" selected>${this._escape(selectedCategory.name)} · disattivata</option>` : ""}
-            </select>
-          </label>
-          <label>Mese pagamento<input id="paid-month" type="month" required value="${this._escape(selectedPaid)}"></label>
-          <label>Importo (€)<input id="amount" type="number" min="0" step="0.01" inputmode="decimal" required value="${editing ? this._escape(editing.amount) : ""}" placeholder="0,00"></label>
-          <label class="paid-check"><input id="paid-status" type="checkbox" ${editing?.paid ? "checked" : ""}><div><strong>Bolletta pagata</strong><span>Attiva il check solo quando la bolletta è stata effettivamente saldata.</span></div></label>
-          ${formPayers.length ? `<label>Pagata da
-            <select id="payer" required>
-              ${formPayers.map((p) => `<option value="${this._escape(p.id)}" ${p.id === defaultPayerId ? "selected" : ""}>${this._escape(p.name)}${p.enabled ? "" : " · disattivato"}</option>`).join("")}
-            </select>
-          </label>` : ""}
-          <label>Fine competenza<input id="period-end" type="month" required value="${this._escape(defaultEnd)}"></label>
-          <label>Inizio competenza<input id="period-start" type="month" required value="${this._escape(defaultStart)}"></label>
-          <label class="wide">Nota (opzionale)<input id="note" type="text" maxlength="120" value="${editing ? this._escape(editing.note || "") : ""}" placeholder="Es. conguaglio, rata, periodo fatturato..."></label>
-          ${formPayers.length ? `<div class="split-box">
-            <div class="split-head"><strong>Divisione della spesa</strong><span id="split-total" class="split-total"></span></div>
-            <div class="split-grid">
-              ${formPayers.map((p) => `<label>${this._escape(p.name)} (%)<input class="split-input" data-payer="${this._escape(p.id)}" type="number" min="0" max="100" step="0.01" value="${Number(splitMap[p.id] || 0)}"></label>`).join("")}
+        ${editing ? `<div class="edit-modal" id="edit-modal" role="presentation">
+          <div class="edit-modal-shell" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+            <div class="edit-modal-head">
+              <div><strong id="edit-modal-title">Modifica bolletta</strong><span>${this._escape(editing.category)} · ${this._monthLabel(editing.paid_year, editing.paid_month)}</span></div>
+              <button class="secondary edit-modal-close" id="modal-close" type="button" aria-label="Chiudi modifica">×</button>
             </div>
-          </div>` : '<div class="form-help">Nessun pagante configurato: la bolletta verrà salvata senza divisione. Puoi aggiungere i paganti dalle impostazioni.</div>'}
-          <div class="form-help">La periodicità precompila il periodo di competenza. “Pagata da” indica chi anticipa la spesa; il check “Bolletta pagata” decide se il pagamento è realmente avvenuto e solo le bollette pagate entrano nei saldi tra persone.</div>
-          <div class="buttons"><button class="secondary" id="cancel" type="button">Annulla</button><button class="primary" type="submit">${editing ? "Salva modifiche" : "Aggiungi"}</button></div>
-        </form>` : ""}
+            ${expenseFormHtml}
+          </div>
+        </div>` : (this._formOpen ? expenseFormHtml : "")}
         ${this._error ? `<div class="msg error">${this._escape(this._error)}</div>` : ""}
 
         <div class="section"><div class="section-title">Rimborsi tra paganti</div><div class="settle-box">${this._renderDebts()}</div></div>
@@ -602,6 +619,13 @@ class BillTrackerCard extends HTMLElement {
       this._editing = null;
       this._formOpen = false;
       this._render();
+    });
+    this.shadowRoot.getElementById("modal-close")?.addEventListener("click", () => this._closeEditModal());
+    this.shadowRoot.getElementById("edit-modal")?.addEventListener("click", (event) => {
+      if (event.target?.id === "edit-modal") this._closeEditModal();
+    });
+    this.shadowRoot.getElementById("edit-modal")?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") this._closeEditModal();
     });
     this.shadowRoot.getElementById("category")?.addEventListener("change", () => this._applyCategoryDefaults());
     this.shadowRoot.getElementById("paid-month")?.addEventListener("change", () => this._autoPeriod());
@@ -734,7 +758,19 @@ class BillTrackerCard extends HTMLElement {
 
   _startEdit(id) {
     this._editing = (this._data?.expenses || []).find((x) => x.id === id) || null;
-    this._formOpen = true;
+    this._formOpen = false;
+    this._render();
+    const modal = this.shadowRoot?.getElementById("edit-modal");
+    if (modal) {
+      modal.tabIndex = -1;
+      modal.focus();
+    }
+  }
+
+  _closeEditModal() {
+    this._editing = null;
+    this._formOpen = false;
+    this._error = null;
     this._render();
   }
 
