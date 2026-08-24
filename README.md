@@ -2,13 +2,13 @@
 
 Billy is a HACS custom integration for keeping a persistent history of household bills directly in Home Assistant. It supports recurring bills, competence periods, normalized monthly costs, forecasts and bill splitting between multiple payers.
 
-## v0.4.4 features
+## v0.4.5 features
 
 - **Bollette da pagare** sums only unpaid bills; paid bills are excluded from this balance. Split reimbursements between payers are tracked separately.
 
 ### Complete bill history
 
-The dashboard keeps the compact **Ultime bollette** list and adds a **Tutte le bollette** button. The complete list can be filtered by bill type. Every bill has an interactive checkmark: click it to mark the bill paid or unpaid immediately, without opening the edit form.
+The dashboard keeps the compact **Ultime bollette** list and adds a **Tutte le bollette** button. The full history opens in a paginated modal and can be filtered by bill type, by a single year, or by an arbitrary month/year range. Every row has an interactive checkmark to mark the bill paid or unpaid without opening the edit form.
 
 ### Bills and forecasts
 
@@ -38,16 +38,16 @@ The shares act as weights and are normalized to 100% for new bills. For example,
 
 For each bill type you can also choose a **default payer**. When adding a bill, Billy preselects that payer and the default split, but both can be overridden on the individual bill.
 
-Billy calculates a net balance between payers. If one person paid most bills while the other paid some smaller ones, reciprocal debts are automatically netted into the minimum transfer required to settle the account.
+Billy calculates the outstanding split balance from **unpaid bills only**. For each unpaid bill, the configured payer is the person who advanced the bill and each other participant owes their configured share. Opposite-direction bills between the same two people are netted together. Paid bills never contribute to the current balance.
 
-When the creditor has PayPal.Me configured, the dashboard shows **Pay with PayPal** and opens PayPal.Me with the exact outstanding EUR amount already filled in. Billy does not verify the external PayPal payment; use **Mark as settled** after the payment is completed.
+When the creditor has PayPal.Me configured, the dashboard shows **Pay with PayPal** and opens PayPal.Me with the exact outstanding EUR amount already filled in. After the external payment, use **Segna saldato**. Billy then marks every unpaid bill included in that displayed balance as paid, so their checkmarks update and the balance becomes zero.
 
-Settlement history is stored locally and can be reversed if it was recorded by mistake.
+Settlement history stores the linked bill IDs. Reversing a settlement reopens those linked bills as unpaid.
 
 
 ### Payment status
 
-Every bill has an explicit **Paid** checkbox. The configured payer and the payment status are independent: selecting a payer does not automatically mark the bill as paid. New bills are unpaid by default, and older databases migrate missing payment status as unpaid. Only paid bills contribute to split balances and the Payments cash-flow view. Paid entries show a checkmark in the recent-bills list.
+Every bill has an explicit **Paid** checkbox. The configured payer and the payment status are independent: selecting a payer does not automatically mark the bill as paid. New bills are unpaid by default, and older databases migrate missing payment status as unpaid. **Only unpaid bills contribute to the outstanding split balance**; marking a bill paid removes it from that balance. Paid entries show a checkmark in recent and complete-history lists. The Payments chart continues to show bills marked paid.
 
 ## HACS installation
 
@@ -102,7 +102,7 @@ The user still confirms and completes the payment on PayPal. No PayPal credentia
 
 ## Migration
 
-Storage schema v4 automatically migrates v0.3 data. Bill history, categories, recurrence and competence periods are preserved. Historical bills without payer information remain excluded from split balances until edited.
+Storage schema v6 automatically migrates older Billy data. Bill history, categories, recurrence and competence periods are preserved. Historical bills without payer information remain excluded from split balances until edited.
 
 ## Requirements
 

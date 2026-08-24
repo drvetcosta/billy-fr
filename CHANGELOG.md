@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.4.5
+
+### Bill history modal
+
+- **Tutte le bollette** now opens in a dedicated modal instead of expanding the dashboard card.
+- The modal is paginated (10/20/50 items per page).
+- Added filters by bill type, single year, or an arbitrary month/year range.
+- Payment checkmarks remain editable directly from the paginated list.
+- Editing a bill opens the existing edit modal above the history modal and preserves filters/page context.
+
+### Outstanding split balance fix
+
+- Fixed payer balances so they are calculated **only from unpaid bills**.
+- Paid bills are excluded from the person-to-person balance.
+- Pairwise debts are netted only between the people actually involved, keeping every displayed balance traceable to its source bills.
+- Example: two unpaid bills of €179 and €25 at 50/50 now correctly produce a €102 balance.
+
+### Settle balance closes the underlying bills
+
+- Clicking **Segna saldato** now marks every unpaid bill contributing to that balance as paid.
+- Those bills immediately show the paid checkmark in recent/history lists and disappear from the outstanding balance.
+- Settlement history stores the linked bill IDs.
+- Undoing a settlement reopens its linked bills as unpaid (unless another settlement still references them).
+- Storage schema upgraded to v6.
+
 ## 0.4.4
 
 - Editing a bill now opens in a centered modal instead of moving the shared add/edit form above the dashboard content.

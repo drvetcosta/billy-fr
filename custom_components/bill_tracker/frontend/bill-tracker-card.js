@@ -1,4 +1,4 @@
-const BILL_TRACKER_VERSION = "0.4.4";
+const BILL_TRACKER_VERSION = "0.4.5";
 
 class BillTrackerCard extends HTMLElement {
   constructor() {
@@ -14,6 +14,12 @@ class BillTrackerCard extends HTMLElement {
     this._chartMode = "cashflow";
     this._allBillsOpen = false;
     this._allBillsCategory = "all";
+    this._allBillsTimeMode = "all";
+    this._allBillsYear = "all";
+    this._allBillsFrom = "";
+    this._allBillsTo = "";
+    this._allBillsPage = 1;
+    this._allBillsPageSize = 10;
     this._unsubscribe = null;
   }
 
@@ -337,6 +343,36 @@ class BillTrackerCard extends HTMLElement {
     return (this._data?.payers || []).filter((p) => p.enabled || ids.has(p.id));
   }
 
+  _allBillsYears(expenses) {
+    return [...new Set((expenses || []).map((x) => Number(x.paid_year)).filter(Number.isInteger))]
+      .sort((a, b) => b - a);
+  }
+
+  _filterAllBills(expenses) {
+    let rows = (expenses || []).slice();
+    if (this._allBillsCategory !== "all") {
+      rows = rows.filter((x) => x.category_id === this._allBillsCategory);
+    }
+    if (this._allBillsTimeMode === "year" && this._allBillsYear !== "all") {
+      const year = Number(this._allBillsYear);
+      rows = rows.filter((x) => Number(x.paid_year) === year);
+    } else if (this._allBillsTimeMode === "range") {
+      let from = this._allBillsFrom || "";
+      let to = this._allBillsTo || "";
+      if (from && to && from > to) [from, to] = [to, from];
+      rows = rows.filter((x) => {
+        const key = this._monthValue(x.paid_year, x.paid_month);
+        return (!from || key >= from) && (!to || key <= to);
+      });
+    }
+    return rows;
+  }
+
+  _closeAllBillsModal() {
+    this._allBillsOpen = false;
+    this._render();
+  }
+
   _renderDebts() {
     const payers = this._data?.payers || [];
     if (payers.length < 2) {
@@ -348,11 +384,11 @@ class BillTrackerCard extends HTMLElement {
     }
     return `<div class="debt-list">${debts.map((debt) => `
       <div class="debt-row">
-        <div><strong>${this._escape(debt.from_name)} → ${this._escape(debt.to_name)}</strong><span>Saldo netto da rimborsare</span></div>
+        <div><strong>${this._escape(debt.from_name)} → ${this._escape(debt.to_name)}</strong><span>Saldo da regolare · ${Number(debt.expense_count || 0)} ${Number(debt.expense_count || 0) === 1 ? "bolletta" : "bollette"} non pagate</span></div>
         <b>${this._money(debt.amount)}</b>
         <div class="debt-actions">
           ${debt.paypal_url ? `<a class="paypal" href="${this._escape(debt.paypal_url)}" target="_blank" rel="noopener noreferrer">Paga con PayPal</a>` : `<button class="secondary small" type="button" disabled title="Aggiungi il PayPal.Me del creditore nelle impostazioni">PayPal.Me non configurato</button>`}
-          <button class="primary small settle" type="button" data-from="${this._escape(debt.from_payer_id)}" data-to="${this._escape(debt.to_payer_id)}" data-amount="${Number(debt.amount)}">Segna saldato</button>
+          <button class="primary small settle" type="button" data-from="${this._escape(debt.from_payer_id)}" data-to="${this._escape(debt.to_payer_id)}" data-amount="${Number(debt.amount)}" data-count="${Number(debt.expense_count || 0)}">Segna saldato</button>
         </div>
       </div>`).join("")}</div>`;
   }
@@ -389,9 +425,13 @@ class BillTrackerCard extends HTMLElement {
     const allExpenses = this._data.expenses || [];
     const expenses = allExpenses.slice(0, this._config.recent);
     const allBillCategories = (this._data.categories || []).slice().sort((a, b) => String(a.name).localeCompare(String(b.name), "it"));
-    const filteredAllExpenses = this._allBillsCategory === "all"
-      ? allExpenses
-      : allExpenses.filter((x) => x.category_id === this._allBillsCategory);
+    const allBillYears = this._allBillsYears(allExpenses);
+    const filteredAllExpenses = this._filterAllBills(allExpenses);
+    const totalAllBillPages = Math.max(1, Math.ceil(filteredAllExpenses.length / this._allBillsPageSize));
+    if (this._allBillsPage > totalAllBillPages) this._allBillsPage = totalAllBillPages;
+    if (this._allBillsPage < 1) this._allBillsPage = 1;
+    const allBillsStart = (this._allBillsPage - 1) * this._allBillsPageSize;
+    const pagedAllExpenses = filteredAllExpenses.slice(allBillsStart, allBillsStart + this._allBillsPageSize);
     const settlements = (this._data.settlements || []).slice(0, 5);
     const upcoming = (this._data.upcoming || []).slice(0, 8);
 
@@ -419,7 +459,7 @@ class BillTrackerCard extends HTMLElement {
               ${formPayers.map((p) => `<label>${this._escape(p.name)} (%)<input class="split-input" data-payer="${this._escape(p.id)}" type="number" min="0" max="100" step="0.01" value="${Number(splitMap[p.id] || 0)}"></label>`).join("")}
             </div>
           </div>` : '<div class="form-help">Nessun pagante configurato: la bolletta verrà salvata senza divisione. Puoi aggiungere i paganti dalle impostazioni.</div>'}
-          <div class="form-help">La periodicità precompila il periodo di competenza. “Pagata da” indica chi anticipa la spesa; il check “Bolletta pagata” decide se il pagamento è realmente avvenuto e solo le bollette pagate entrano nei saldi tra persone.</div>
+          <div class="form-help">La periodicità precompila il periodo di competenza. “Pagata da” indica chi anticipa la spesa; il check “Bolletta pagata” indica che quella bolletta è già stata regolata. Solo le bollette NON pagate entrano nel saldo tra persone.</div>
           <div class="buttons"><button class="secondary" id="cancel" type="button">Annulla</button><button class="primary" type="submit">${editing ? "Salva modifiche" : "Aggiungi"}</button></div>
         </form>`;
 
@@ -472,11 +512,19 @@ class BillTrackerCard extends HTMLElement {
         .section-title { font-size:15px; font-weight:600; margin-bottom:8px; }
         .section-head { display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px; flex-wrap:wrap; }
         .section-head .section-title { margin-bottom:0; }
-        .all-bills-panel { margin-top:14px; padding:14px; border:1px solid var(--divider-color); border-radius:12px; background:var(--card-background-color); }
-        .all-bills-toolbar { display:flex; gap:10px; align-items:end; justify-content:space-between; margin-bottom:8px; flex-wrap:wrap; }
-        .all-bills-toolbar label { min-width:220px; }
-        .all-bills-count { color:var(--secondary-text-color); font-size:12px; }
-        .all-bills-list { max-height:620px; overflow:auto; padding-right:3px; }
+        .all-bills-modal { position:fixed; inset:0; z-index:900; display:flex; align-items:center; justify-content:center; padding:24px; background:rgba(0,0,0,.52); box-sizing:border-box; }
+        .all-bills-shell { width:min(1120px,100%); max-height:calc(100vh - 48px); display:flex; flex-direction:column; overflow:hidden; background:var(--card-background-color); color:var(--primary-text-color); border-radius:16px; box-shadow:0 16px 50px rgba(0,0,0,.35); }
+        .all-bills-head { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:14px 16px; border-bottom:1px solid var(--divider-color); }
+        .all-bills-head strong { display:block; font-size:17px; }
+        .all-bills-head span { display:block; margin-top:2px; color:var(--secondary-text-color); font-size:12px; }
+        .all-bills-body { padding:14px 16px; overflow:auto; min-height:0; }
+        .all-bills-toolbar { display:grid; grid-template-columns:minmax(170px,1fr) minmax(150px,.8fr) minmax(170px,1fr) minmax(170px,1fr); gap:10px; align-items:end; margin-bottom:12px; }
+        .all-bills-toolbar .range-hidden { display:none; }
+        .all-bills-count { color:var(--secondary-text-color); font-size:12px; margin:4px 0 8px; }
+        .all-bills-list { min-height:180px; }
+        .all-bills-footer { display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 16px; border-top:1px solid var(--divider-color); }
+        .pagination { display:flex; align-items:center; gap:8px; }
+        .pagination span { color:var(--secondary-text-color); font-size:12px; }
         .all-row { display:grid; grid-template-columns:42px 125px minmax(180px,1fr) 120px auto; gap:10px; align-items:center; padding:10px 0; border-bottom:1px solid var(--divider-color); }
         .all-row:last-child { border-bottom:0; }
         .paid-toggle { display:flex; align-items:center; justify-content:center; cursor:pointer; }
@@ -525,8 +573,8 @@ class BillTrackerCard extends HTMLElement {
         .settlement { display:grid; grid-template-columns:1fr auto auto; gap:10px; align-items:center; padding:8px 0; border-bottom:1px solid var(--divider-color); }
         .settlement span { color:var(--secondary-text-color); font-size:12px; }
         @media (max-width:1000px) { .stats { grid-template-columns:repeat(3,minmax(0,1fr)); } .debt-row { grid-template-columns:1fr auto; } .debt-actions { grid-column:1 / -1; } }
-        @media (max-width:760px) { .stats { grid-template-columns:repeat(2,minmax(0,1fr)); } form { grid-template-columns:1fr 1fr; } .wide,.split-box,.form-help,.buttons { grid-column:1 / -1; } .all-row { grid-template-columns:42px 110px 1fr auto; } .all-row .amount { grid-column:3; text-align:left; } .all-row .actions { grid-column:4; grid-row:1 / span 2; } }
-        @media (max-width:560px) { ha-card { padding:13px; } .edit-modal { padding:8px; align-items:flex-end; } .edit-modal-shell { max-height:calc(100vh - 16px); border-radius:16px 16px 8px 8px; } .stats { grid-template-columns:1fr; } form { grid-template-columns:1fr; } .wide,.split-box,.form-help,.buttons { grid-column:1; } .row { grid-template-columns:1fr auto; } .row .amount { grid-column:1; text-align:left; } .row .actions { grid-column:2; grid-row:1 / span 2; } .debt-row { grid-template-columns:1fr; } .debt-actions { grid-column:1; } .settlement { grid-template-columns:1fr auto; } .all-bills-toolbar label { min-width:100%; } .all-row { grid-template-columns:36px 1fr auto; } .all-row .all-date { grid-column:2; } .all-row .all-main { grid-column:2; } .all-row .amount { grid-column:2; text-align:left; } .all-row .actions { grid-column:3; grid-row:1 / span 3; } }
+        @media (max-width:760px) { .stats { grid-template-columns:repeat(2,minmax(0,1fr)); } form { grid-template-columns:1fr 1fr; } .wide,.split-box,.form-help,.buttons { grid-column:1 / -1; } .all-bills-toolbar { grid-template-columns:1fr 1fr; } .all-row { grid-template-columns:42px 110px 1fr auto; } .all-row .amount { grid-column:3; text-align:left; } .all-row .actions { grid-column:4; grid-row:1 / span 2; } }
+        @media (max-width:560px) { ha-card { padding:13px; } .edit-modal,.all-bills-modal { padding:8px; align-items:flex-end; } .edit-modal-shell,.all-bills-shell { max-height:calc(100vh - 16px); border-radius:16px 16px 8px 8px; } .stats { grid-template-columns:1fr; } form { grid-template-columns:1fr; } .wide,.split-box,.form-help,.buttons { grid-column:1; } .row { grid-template-columns:1fr auto; } .row .amount { grid-column:1; text-align:left; } .row .actions { grid-column:2; grid-row:1 / span 2; } .debt-row { grid-template-columns:1fr; } .debt-actions { grid-column:1; } .settlement { grid-template-columns:1fr auto; } .all-bills-toolbar { grid-template-columns:1fr; } .all-row { grid-template-columns:36px 1fr auto; } .all-row .all-date { grid-column:2; } .all-row .all-main { grid-column:2; } .all-row .amount { grid-column:2; text-align:left; } .all-row .actions { grid-column:3; grid-row:1 / span 3; } }
       </style>
       <ha-card>
         <div class="head">
@@ -573,7 +621,7 @@ class BillTrackerCard extends HTMLElement {
         ${settlements.length ? `<div class="section"><div class="section-title">Rimborsi recenti</div>${settlements.map((x) => `<div class="settlement"><div><strong>${this._escape(x.from_name)} → ${this._escape(x.to_name)}</strong><span>${new Date(x.created_at).toLocaleString("it-IT")}${x.note ? ` · ${this._escape(x.note)}` : ""}</span></div><b>${this._money(x.amount)}</b><button class="icon delete-settlement" type="button" data-id="${this._escape(x.id)}" title="Annulla rimborso">×</button></div>`).join("")}</div>` : ""}
 
         <div class="section">
-          <div class="section-head"><div class="section-title">Ultime bollette</div><button class="secondary small" id="open-all-bills" type="button">${this._allBillsOpen ? "Chiudi elenco completo" : `Tutte le bollette (${allExpenses.length})`}</button></div>
+          <div class="section-head"><div class="section-title">Ultime bollette</div><button class="secondary small" id="open-all-bills" type="button">Tutte le bollette (${allExpenses.length})</button></div>
           <div class="list">
             ${expenses.length ? expenses.map((x) => `<div class="row">
               <div><strong>${this._monthLabel(x.paid_year, x.paid_month)}</strong><div class="date">${this._escape(this._periodText(x))}</div></div>
@@ -582,30 +630,64 @@ class BillTrackerCard extends HTMLElement {
               <div class="actions"><button class="icon edit" type="button" data-id="${this._escape(x.id)}" title="Modifica">✎</button><button class="icon delete" type="button" data-id="${this._escape(x.id)}" title="Elimina">×</button></div>
             </div>`).join("") : '<div class="msg">Nessuna bolletta inserita.</div>'}
           </div>
-          ${this._allBillsOpen ? `<div class="all-bills-panel">
-            <div class="all-bills-toolbar">
-              <label>Filtra per tipo
-                <select id="all-bills-category">
-                  <option value="all" ${this._allBillsCategory === "all" ? "selected" : ""}>Tutti i tipi</option>
-                  ${allBillCategories.map((c) => `<option value="${this._escape(c.id)}" ${c.id === this._allBillsCategory ? "selected" : ""}>${this._escape(c.name)}</option>`).join("")}
-                </select>
-              </label>
-              <div class="all-bills-count">${filteredAllExpenses.length} ${filteredAllExpenses.length === 1 ? "bolletta" : "bollette"}</div>
-            </div>
-            <div class="all-bills-list">
-              ${filteredAllExpenses.length ? filteredAllExpenses.map((x) => `<div class="all-row">
-                <label class="paid-toggle" title="${x.paid ? "Segna come non pagata" : "Segna come pagata"}">
-                  <input class="bill-paid-toggle" type="checkbox" data-id="${this._escape(x.id)}" ${x.paid ? "checked" : ""} aria-label="${x.paid ? "Bolletta pagata" : "Bolletta non pagata"}">
-                  <span class="paid-toggle-mark">✓</span>
-                </label>
-                <div class="all-date"><strong>${this._monthLabel(x.paid_year, x.paid_month)}</strong><div class="date">${this._escape(this._periodText(x))}</div></div>
-                <div class="all-main"><strong>${this._escape(x.category)}</strong><div class="payer-line">${x.payer ? `Pagatore: ${this._escape(x.payer)} · ` : ""}${this._escape(this._splitText(x))}</div>${x.note ? `<div class="note">${this._escape(x.note)}</div>` : ""}</div>
-                <div class="amount">${this._money(x.amount)}</div>
-                <div class="actions"><button class="icon edit" type="button" data-id="${this._escape(x.id)}" title="Modifica">✎</button><button class="icon delete" type="button" data-id="${this._escape(x.id)}" title="Elimina">×</button></div>
-              </div>`).join("") : '<div class="msg">Nessuna bolletta per questo filtro.</div>'}
-            </div>
-          </div>` : ""}
         </div>
+        ${this._allBillsOpen ? `<div class="all-bills-modal" id="all-bills-modal" role="presentation">
+          <div class="all-bills-shell" role="dialog" aria-modal="true" aria-labelledby="all-bills-title">
+            <div class="all-bills-head">
+              <div><strong id="all-bills-title">Tutte le bollette</strong><span>${filteredAllExpenses.length} risultati su ${allExpenses.length}</span></div>
+              <button class="secondary edit-modal-close" id="all-bills-close" type="button" aria-label="Chiudi elenco bollette">×</button>
+            </div>
+            <div class="all-bills-body">
+              <div class="all-bills-toolbar">
+                <label>Tipo
+                  <select id="all-bills-category">
+                    <option value="all" ${this._allBillsCategory === "all" ? "selected" : ""}>Tutti i tipi</option>
+                    ${allBillCategories.map((c) => `<option value="${this._escape(c.id)}" ${c.id === this._allBillsCategory ? "selected" : ""}>${this._escape(c.name)}</option>`).join("")}
+                  </select>
+                </label>
+                <label>Periodo
+                  <select id="all-bills-time-mode">
+                    <option value="all" ${this._allBillsTimeMode === "all" ? "selected" : ""}>Tutto lo storico</option>
+                    <option value="year" ${this._allBillsTimeMode === "year" ? "selected" : ""}>Per anno</option>
+                    <option value="range" ${this._allBillsTimeMode === "range" ? "selected" : ""}>Intervallo mesi</option>
+                  </select>
+                </label>
+                ${this._allBillsTimeMode === "year" ? `<label>Anno
+                  <select id="all-bills-year">
+                    <option value="all" ${this._allBillsYear === "all" ? "selected" : ""}>Tutti gli anni</option>
+                    ${allBillYears.map((year) => `<option value="${year}" ${String(year) === String(this._allBillsYear) ? "selected" : ""}>${year}</option>`).join("")}
+                  </select>
+                </label>` : ""}
+                ${this._allBillsTimeMode === "range" ? `<label>Da<input id="all-bills-from" type="month" value="${this._escape(this._allBillsFrom)}"></label><label>A<input id="all-bills-to" type="month" value="${this._escape(this._allBillsTo)}"></label>` : ""}
+                <label>Per pagina
+                  <select id="all-bills-page-size">
+                    ${[10,20,50].map((size) => `<option value="${size}" ${Number(this._allBillsPageSize) === size ? "selected" : ""}>${size}</option>`).join("")}
+                  </select>
+                </label>
+              </div>
+              <div class="all-bills-count">${filteredAllExpenses.length ? `${allBillsStart + 1}–${Math.min(allBillsStart + this._allBillsPageSize, filteredAllExpenses.length)} di ${filteredAllExpenses.length}` : "Nessuna bolletta"}</div>
+              <div class="all-bills-list">
+                ${pagedAllExpenses.length ? pagedAllExpenses.map((x) => `<div class="all-row">
+                  <label class="paid-toggle" title="${x.paid ? "Segna come non pagata" : "Segna come pagata"}">
+                    <input class="bill-paid-toggle" type="checkbox" data-id="${this._escape(x.id)}" ${x.paid ? "checked" : ""} aria-label="${x.paid ? "Bolletta pagata" : "Bolletta non pagata"}">
+                    <span class="paid-toggle-mark">✓</span>
+                  </label>
+                  <div class="all-date"><strong>${this._monthLabel(x.paid_year, x.paid_month)}</strong><div class="date">${this._escape(this._periodText(x))}</div></div>
+                  <div class="all-main"><strong>${this._escape(x.category)}</strong><div class="payer-line">${x.payer ? `Pagatore: ${this._escape(x.payer)} · ` : ""}${this._escape(this._splitText(x))}</div>${x.note ? `<div class="note">${this._escape(x.note)}</div>` : ""}</div>
+                  <div class="amount">${this._money(x.amount)}</div>
+                  <div class="actions"><button class="icon edit" type="button" data-id="${this._escape(x.id)}" title="Modifica">✎</button><button class="icon delete" type="button" data-id="${this._escape(x.id)}" title="Elimina">×</button></div>
+                </div>`).join("") : '<div class="msg">Nessuna bolletta per i filtri selezionati.</div>'}
+              </div>
+            </div>
+            <div class="all-bills-footer">
+              <span class="all-bills-count">Pagina ${this._allBillsPage} di ${totalAllBillPages}</span>
+              <div class="pagination">
+                <button class="secondary small all-bills-page" type="button" data-page="${this._allBillsPage - 1}" ${this._allBillsPage <= 1 ? "disabled" : ""}>← Precedente</button>
+                <button class="secondary small all-bills-page" type="button" data-page="${this._allBillsPage + 1}" ${this._allBillsPage >= totalAllBillPages ? "disabled" : ""}>Successiva →</button>
+              </div>
+            </div>
+          </div>
+        </div>` : ""}
       </ha-card>`;
 
     this.shadowRoot.getElementById("open-form")?.addEventListener("click", () => {
@@ -636,13 +718,53 @@ class BillTrackerCard extends HTMLElement {
       this._render();
     }));
     this.shadowRoot.getElementById("open-all-bills")?.addEventListener("click", () => {
-      this._allBillsOpen = !this._allBillsOpen;
+      this._allBillsOpen = true;
+      this._allBillsPage = 1;
       this._render();
+      const modal = this.shadowRoot?.getElementById("all-bills-modal");
+      if (modal) { modal.tabIndex = -1; modal.focus(); }
+    });
+    this.shadowRoot.getElementById("all-bills-close")?.addEventListener("click", () => this._closeAllBillsModal());
+    this.shadowRoot.getElementById("all-bills-modal")?.addEventListener("click", (event) => {
+      if (event.target?.id === "all-bills-modal") this._closeAllBillsModal();
+    });
+    this.shadowRoot.getElementById("all-bills-modal")?.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !this._editing) this._closeAllBillsModal();
     });
     this.shadowRoot.getElementById("all-bills-category")?.addEventListener("change", (event) => {
       this._allBillsCategory = event.target.value || "all";
+      this._allBillsPage = 1;
       this._render();
     });
+    this.shadowRoot.getElementById("all-bills-time-mode")?.addEventListener("change", (event) => {
+      this._allBillsTimeMode = event.target.value || "all";
+      this._allBillsPage = 1;
+      this._render();
+    });
+    this.shadowRoot.getElementById("all-bills-year")?.addEventListener("change", (event) => {
+      this._allBillsYear = event.target.value || "all";
+      this._allBillsPage = 1;
+      this._render();
+    });
+    this.shadowRoot.getElementById("all-bills-from")?.addEventListener("change", (event) => {
+      this._allBillsFrom = event.target.value || "";
+      this._allBillsPage = 1;
+      this._render();
+    });
+    this.shadowRoot.getElementById("all-bills-to")?.addEventListener("change", (event) => {
+      this._allBillsTo = event.target.value || "";
+      this._allBillsPage = 1;
+      this._render();
+    });
+    this.shadowRoot.getElementById("all-bills-page-size")?.addEventListener("change", (event) => {
+      this._allBillsPageSize = [10,20,50].includes(Number(event.target.value)) ? Number(event.target.value) : 10;
+      this._allBillsPage = 1;
+      this._render();
+    });
+    this.shadowRoot.querySelectorAll(".all-bills-page").forEach((btn) => btn.addEventListener("click", () => {
+      this._allBillsPage = Math.max(1, Number(btn.dataset.page || 1));
+      this._render();
+    }));
     this.shadowRoot.querySelectorAll(".bill-paid-toggle").forEach((input) => input.addEventListener("change", () => this._togglePaid(input)));
     this.shadowRoot.querySelectorAll(".edit").forEach((btn) => btn.addEventListener("click", () => this._startEdit(btn.dataset.id)));
     this.shadowRoot.querySelectorAll(".delete").forEach((btn) => btn.addEventListener("click", () => this._delete(btn.dataset.id)));
@@ -792,14 +914,15 @@ class BillTrackerCard extends HTMLElement {
     const to = button.dataset.to;
     const fromName = this._payerById(from)?.name || "Il debitore";
     const toName = this._payerById(to)?.name || "il creditore";
-    if (!confirm(`Segnare come saldato il rimborso di ${this._money(amount)} da ${fromName} a ${toName}?`)) return;
+    const count = Number(button.dataset.count || 0);
+    if (!confirm(`Segnare come saldato ${this._money(amount)} da ${fromName} a ${toName}? Le ${count || ""} bollette incluse nel saldo verranno marcate come pagate.`)) return;
     try {
       await this._hass.callWS({
         type: "bill_tracker/settlement/add",
         from_payer_id: from,
         to_payer_id: to,
         amount,
-        note: "Saldo registrato da Billy",
+        note: "Saldo registrato da Billy; bollette collegate marcate come pagate",
       });
       await this._load();
     } catch (err) {
@@ -809,7 +932,7 @@ class BillTrackerCard extends HTMLElement {
   }
 
   async _deleteSettlement(id) {
-    if (!this._hass || !confirm("Annullare questo rimborso? Il saldo verrà ricalcolato.")) return;
+    if (!this._hass || !confirm("Annullare questo saldo? Le bollette collegate verranno nuovamente segnate come non pagate.")) return;
     try {
       await this._hass.callWS({ type: "bill_tracker/settlement/delete", settlement_id: id });
       await this._load();

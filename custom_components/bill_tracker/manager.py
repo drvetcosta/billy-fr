@@ -376,28 +376,69 @@ class BillTrackerManager:
         amount: float,
         note: str = "",
     ) -> dict[str, Any]:
+        """Settle one complete payer-to-payer balance and mark its bills paid.
+
+        In Billy, ``paid`` means that a bill no longer contributes to the
+        outstanding split balance.  Therefore a balance settlement must close
+        the underlying unpaid bills too, otherwise the same debt would appear
+        again immediately after recording the settlement.
+        """
         source = self.payer(from_payer_id)
         target = self.payer(to_payer_id)
         if source is None or target is None or from_payer_id == to_payer_id:
             raise ValueError("Paganti non validi")
         self._validate_amount(amount, allow_zero=False)
-        outstanding = next(
+
+        debt = next(
             (
-                float(x["amount"])
-                for x in self.debts()
+                x for x in self.debts()
                 if x["from_payer_id"] == from_payer_id and x["to_payer_id"] == to_payer_id
             ),
-            0.0,
+            None,
         )
-        if outstanding <= 0:
-            raise ValueError("Non esiste un debito aperto tra questi paganti")
-        if float(amount) > outstanding + 0.01:
-            raise ValueError("Il rimborso supera il debito aperto")
+        if debt is None or float(debt.get("amount", 0.0)) <= 0:
+            raise ValueError("Non esiste un saldo aperto tra questi paganti")
+
+        outstanding = float(debt["amount"])
+        # The UI settles a balance in full. Partial settlements would require
+        # per-share state on every bill instead of the single paid checkbox.
+        if abs(float(amount) - outstanding) > 0.01:
+            raise ValueError("Per ora Billy può saldare solo l'intero saldo aperto")
+
+        expense_ids = [str(x) for x in debt.get("expense_ids", []) if x]
+        if not expense_ids:
+            raise ValueError("Nessuna bolletta non pagata associata a questo saldo")
+
+        # A single paid flag represents the whole bill. Avoid silently closing
+        # a multi-party bill when only one of several participant debts is paid.
+        pair = {from_payer_id, to_payer_id}
+        for expense in self.expenses:
+            if str(expense.get("id")) not in expense_ids:
+                continue
+            participants = {
+                str(part.get("payer_id"))
+                for part in expense.get("split", [])
+                if float(part.get("percentage", 0.0) or 0.0) > 0
+            }
+            payer_id = str(expense.get("payer_id") or "")
+            if payer_id:
+                participants.add(payer_id)
+            if not participants.issubset(pair):
+                raise ValueError(
+                    "Questo saldo include una bolletta divisa tra più di due persone: "
+                    "segnala le quote manualmente prima di saldarla"
+                )
+
+        for expense in self.expenses:
+            if str(expense.get("id")) in expense_ids:
+                expense["paid"] = True
+
         item = {
             "id": uuid4().hex,
             "from_payer_id": from_payer_id,
             "to_payer_id": to_payer_id,
-            "amount": round(float(amount), 2),
+            "amount": round(outstanding, 2),
+            "expense_ids": expense_ids,
             "note": note.strip(),
             "created_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         }
@@ -407,86 +448,133 @@ class BillTrackerManager:
         return self._public_settlement(item)
 
     async def async_delete_settlement(self, settlement_id: str) -> bool:
-        before = len(self.settlements)
+        """Undo a recorded settlement and reopen its linked bills."""
+        item = next((x for x in self.settlements if x.get("id") == settlement_id), None)
+        if item is None:
+            return False
+
+        linked = {str(x) for x in item.get("expense_ids", []) if x}
         self.settlements = [x for x in self.settlements if x.get("id") != settlement_id]
-        changed = len(self.settlements) != before
-        if changed:
-            await self._save_and_notify()
-        return changed
 
-    def balances(self) -> list[dict[str, Any]]:
-        """Return net position by payer. Positive means they should receive money."""
-        positions: dict[str, float] = {str(x["id"]): 0.0 for x in self.payers}
+        # Do not reopen a bill if another settlement still references it.
+        still_settled = {
+            str(expense_id)
+            for settlement in self.settlements
+            for expense_id in settlement.get("expense_ids", [])
+            if expense_id
+        }
+        for expense in self.expenses:
+            expense_id = str(expense.get("id"))
+            if expense_id in linked and expense_id not in still_settled:
+                expense["paid"] = False
+
+        await self._save_and_notify()
+        return True
+
+    def _pairwise_debts(self) -> list[dict[str, Any]]:
+        """Build pairwise debts from *unpaid* bills only.
+
+        A bill paid by A with a 50% share for B creates B -> A for half of
+        the bill. Opposite-direction bills between the same pair are netted,
+        but Billy does not create artificial cross-person transfers. This keeps
+        every displayed balance traceable to the bills that generated it.
+        """
+        amounts: dict[tuple[str, str], float] = defaultdict(float)
+        expense_ids: dict[tuple[str, str], set[str]] = defaultdict(set)
+
         for item in self.expenses:
-            if not bool(item.get("paid", False)):
+            if bool(item.get("paid", False)):
                 continue
-            payer_id = str(item.get("payer_id") or "")
-            if payer_id not in positions:
+            creditor = str(item.get("payer_id") or "")
+            if self.payer(creditor) is None:
                 continue
-            amount = float(item.get("amount", 0.0))
-            positions[payer_id] += amount
+            amount = float(item.get("amount", 0.0) or 0.0)
+            if amount <= 0:
+                continue
+            item_id = str(item.get("id") or "")
             for part in item.get("split", []):
-                participant = str(part.get("payer_id") or "")
-                if participant not in positions:
+                debtor = str(part.get("payer_id") or "")
+                if not debtor or debtor == creditor or self.payer(debtor) is None:
                     continue
-                positions[participant] -= amount * float(part.get("percentage", 0.0)) / 100.0
-        for item in self.settlements:
-            source = str(item.get("from_payer_id") or "")
-            target = str(item.get("to_payer_id") or "")
-            amount = float(item.get("amount", 0.0))
-            if source in positions:
-                positions[source] += amount
-            if target in positions:
-                positions[target] -= amount
-        rows = []
-        for payer in self.payers:
-            value = round(positions.get(str(payer["id"]), 0.0), 2)
-            rows.append(
-                {
-                    "payer_id": str(payer["id"]),
-                    "name": str(payer["name"]),
-                    "balance": value,
-                    "status": "credit" if value > 0.009 else "debt" if value < -0.009 else "even",
-                }
-            )
-        return rows
+                percentage = float(part.get("percentage", 0.0) or 0.0)
+                share = amount * percentage / 100.0
+                if share <= 0.009:
+                    continue
+                key = (debtor, creditor)
+                amounts[key] += share
+                if item_id:
+                    expense_ids[key].add(item_id)
 
-    def debts(self) -> list[dict[str, Any]]:
-        """Convert net payer positions to a minimal list of outstanding transfers."""
-        balances = self.balances()
-        creditors = [[x, float(x["balance"])] for x in balances if float(x["balance"]) > 0.009]
-        debtors = [[x, -float(x["balance"])] for x in balances if float(x["balance"]) < -0.009]
-        creditors.sort(key=lambda x: x[1], reverse=True)
-        debtors.sort(key=lambda x: x[1], reverse=True)
+        payer_ids = [str(x["id"]) for x in self.payers]
         result: list[dict[str, Any]] = []
-        ci = di = 0
-        while ci < len(creditors) and di < len(debtors):
-            creditor, credit = creditors[ci]
-            debtor, debt = debtors[di]
-            amount = round(min(credit, debt), 2)
-            if amount > 0:
-                target = self.payer(str(creditor["payer_id"]))
-                paypal_me = str(target.get("paypal_me", "")) if target else ""
+        seen: set[frozenset[str]] = set()
+        for left in payer_ids:
+            for right in payer_ids:
+                if left == right:
+                    continue
+                pair = frozenset((left, right))
+                if pair in seen:
+                    continue
+                seen.add(pair)
+                left_to_right = amounts.get((left, right), 0.0)
+                right_to_left = amounts.get((right, left), 0.0)
+                net = round(left_to_right - right_to_left, 2)
+                if abs(net) <= 0.009:
+                    continue
+                if net > 0:
+                    from_id, to_id, value = left, right, net
+                else:
+                    from_id, to_id, value = right, left, -net
+                source = self.payer(from_id)
+                target = self.payer(to_id)
+                if source is None or target is None:
+                    continue
+                linked = sorted(expense_ids.get((left, right), set()) | expense_ids.get((right, left), set()))
+                paypal_me = str(target.get("paypal_me", ""))
                 result.append(
                     {
-                        "from_payer_id": str(debtor["payer_id"]),
-                        "from_name": str(debtor["name"]),
-                        "to_payer_id": str(creditor["payer_id"]),
-                        "to_name": str(creditor["name"]),
-                        "amount": amount,
+                        "from_payer_id": from_id,
+                        "from_name": str(source.get("name", "")),
+                        "to_payer_id": to_id,
+                        "to_name": str(target.get("name", "")),
+                        "amount": round(value, 2),
+                        "expense_ids": linked,
+                        "expense_count": len(linked),
                         "paypal_me": paypal_me,
-                        "paypal_url": self._paypal_url(paypal_me, amount),
+                        "paypal_url": self._paypal_url(paypal_me, value),
                     }
                 )
-            credit = round(credit - amount, 2)
-            debt = round(debt - amount, 2)
-            creditors[ci][1] = credit
-            debtors[di][1] = debt
-            if credit <= 0.009:
-                ci += 1
-            if debt <= 0.009:
-                di += 1
+        result.sort(key=lambda x: float(x["amount"]), reverse=True)
         return result
+
+    def balances(self) -> list[dict[str, Any]]:
+        """Return payer positions generated by unpaid bills only."""
+        positions: dict[str, float] = {str(x["id"]): 0.0 for x in self.payers}
+        for debt in self._pairwise_debts():
+            source = str(debt["from_payer_id"])
+            target = str(debt["to_payer_id"])
+            amount = float(debt["amount"])
+            if source in positions:
+                positions[source] -= amount
+            if target in positions:
+                positions[target] += amount
+        return [
+            {
+                "payer_id": str(payer["id"]),
+                "name": str(payer["name"]),
+                "balance": round(positions.get(str(payer["id"]), 0.0), 2),
+                "status": (
+                    "credit" if positions.get(str(payer["id"]), 0.0) > 0.009
+                    else "debt" if positions.get(str(payer["id"]), 0.0) < -0.009
+                    else "even"
+                ),
+            }
+            for payer in self.payers
+        ]
+
+    def debts(self) -> list[dict[str, Any]]:
+        """Return outstanding pairwise transfers from unpaid bills only."""
+        return self._pairwise_debts()
 
     # ------------------------------------------------------------------
     # Public snapshot / aggregations
@@ -643,8 +731,7 @@ class BillTrackerManager:
             # Outstanding bill balance: paid bills are explicitly excluded.
             "outstanding_total": unpaid_total,
             "unpaid_total": unpaid_total,
-            # Person-to-person reimbursements are a separate concept. They are
-            # generated only after a bill has actually been paid by a payer.
+            # Person-to-person balances are generated only by unpaid bills.
             "reimbursement_total": reimbursement_total,
         }
 
@@ -935,7 +1022,9 @@ class BillTrackerManager:
             item = {
                 "id": str(raw.get("id") or uuid4().hex),
                 "from_payer_id": source, "to_payer_id": target,
-                "amount": round(amount, 2), "note": str(raw.get("note", "")).strip(),
+                "amount": round(amount, 2),
+                "expense_ids": [str(x) for x in raw.get("expense_ids", []) if x],
+                "note": str(raw.get("note", "")).strip(),
                 "created_at": str(raw.get("created_at") or datetime.now().astimezone().isoformat(timespec="seconds")),
             }
             if item != raw:
