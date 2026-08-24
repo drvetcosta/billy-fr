@@ -1,6 +1,34 @@
-# Billy — Home Assistant Bill Tracker
+<p align="center">
+  <img src="docs/images/billy-logo.png" alt="Billy logo" width="520">
+</p>
+
+<h1 align="center">Billy — Home Assistant Bill Tracker</h1>
+
+<p align="center">
+  Track household bills, recurring expenses, forecasts and shared costs directly in Home Assistant.
+</p>
 
 Billy is a HACS custom integration for keeping a persistent history of household bills directly in Home Assistant. It supports recurring bills, competence periods, normalized monthly costs, forecasts and bill splitting between multiple payers.
+
+## Screenshots
+
+### Dashboard
+
+<p align="center">
+  <img src="docs/images/dashboard.webp" alt="Billy dashboard with spending overview, forecasts and split balance" width="520">
+</p>
+
+### Complete bill history
+
+<p align="center">
+  <img src="docs/images/all-bills.webp" alt="Billy complete bill history with filters and pagination" width="820">
+</p>
+
+### Edit a bill
+
+<p align="center">
+  <img src="docs/images/edit-bill.png" alt="Billy edit bill modal with payer and split configuration" width="820">
+</p>
 
 ## v0.4.5 features
 
