@@ -1,115 +1,96 @@
-# Home Assistant Bill Tracker
+# Billy — Home Assistant Bill Tracker
 
-Billy Tracker is a HACS custom integration for keeping a persistent history of household bills directly in Home Assistant. It supports recurring bills with different frequencies, competence periods, normalized monthly costs and category-aware forecasts.
+Billy is a HACS custom integration for keeping a persistent history of household bills directly in Home Assistant. It supports recurring bills, competence periods, normalized monthly costs, forecasts and bill splitting between multiple payers.
 
-## v0.3.0 features
+## v0.4.0 features
+
+### Bills and forecasts
 
 - Add, edit and delete bills from a Lovelace card.
 - Payment month and separate competence period.
 - Persistent storage through Home Assistant `Store` (`.storage`), independent from Recorder retention.
-- Bill types are managed centrally from **Settings → Devices & services → Bill Tracker → Configure**.
-- Add your own bill types at any time.
-- Recurrence per bill type:
-  - monthly (1 month)
-  - bimonthly (2 months)
-  - quarterly (3 months)
-  - every 4 months
-  - every 6 months
-  - yearly (12 months)
-- Enable/disable a bill type without deleting its history.
-- A bill type with history cannot be deleted accidentally; disable it instead.
-- Existing v0.1/v0.2 databases are migrated automatically.
-- Two chart modes:
-  - **Payments**: when money was actually paid.
-  - **Monthly cost**: spreads a multi-month/yearly bill across its competence months.
-- Category-aware forecast: each bill is forecast using its own recurrence and recent amounts.
-- Upcoming estimated bills list.
-- Configurable forecast horizon (1–24 months).
-- Configurable dashboard width (1–12 Section columns).
-- No ApexCharts dependency.
+- Recurrences: monthly, bimonthly, quarterly, every 4 months, every 6 months and yearly.
+- Category-aware forecast based on each bill type's recurrence and recent amounts.
+- **Payments** and **Monthly cost** chart modes.
+- Stacked monthly bars: each bill type has its own color, so the visual impact of each expense is immediately visible.
+
+### Split bills
+
+Manage payers from:
+
+**Settings → Devices & services → Bill Tracker → Configure**
+
+For each payer you can save:
+
+- name;
+- default split share;
+- PayPal.Me username or full link;
+- active/disabled state.
+
+The shares act as weights and are normalized to 100% for new bills. For example, two active payers with shares `50` and `50` get a 50/50 split; `70` and `30` gives a 70/30 split.
+
+For each bill type you can also choose a **default payer**. When adding a bill, Billy preselects that payer and the default split, but both can be overridden on the individual bill.
+
+Billy calculates a net balance between payers. If one person paid most bills while the other paid some smaller ones, reciprocal debts are automatically netted into the minimum transfer required to settle the account.
+
+When the creditor has PayPal.Me configured, the dashboard shows **Pay with PayPal** and opens PayPal.Me with the exact outstanding EUR amount already filled in. Billy does not verify the external PayPal payment; use **Mark as settled** after the payment is completed.
+
+Settlement history is stored locally and can be reversed if it was recorded by mistake.
 
 ## HACS installation
 
 1. Open **HACS**.
-2. Open the menu and choose **Custom repositories**.
-3. Add:
+2. Open **Custom repositories**.
+3. Add `https://github.com/robin994/billy` as an **Integration**.
+4. Install Billy / Bill Tracker.
+5. Restart Home Assistant.
+6. Open **Settings → Devices & services → Add integration**.
+7. Search for **Bill Tracker** and add it.
+8. Hard-refresh the Home Assistant frontend after the first installation/update if the card is cached.
 
-   `https://github.com/robin994/HomeAssistant-Bill-Tracker`
+The integration serves `bill-tracker-card.js` automatically; nothing needs to be copied to `/config/www`.
 
-4. Repository type: **Integration**.
-5. Install **Bill Tracker**.
-6. Restart Home Assistant.
-7. Open **Settings → Devices & services → Add integration**.
-8. Search for **Bill Tracker** and add it.
-9. Hard-refresh the Home Assistant frontend after the first installation/update if the custom card is still cached.
+## Configure payers and bill types
 
-The integration serves and loads `bill-tracker-card.js` automatically; nothing needs to be copied to `/config/www`.
+Open **Settings → Devices & services → Bill Tracker → Configure**.
 
-## Configure bill types
+Recommended first setup for a couple:
 
-Open:
+1. Add payer A with default share `50` and their PayPal.Me if they should receive reimbursements through PayPal.
+2. Add payer B with default share `50` and their PayPal.Me.
+3. Edit each bill type and select its usual default payer.
+4. Optionally customize the chart color for each type.
 
-**Settings → Devices & services → Bill Tracker → Configure**
-
-From there you can:
-
-- add a new bill type;
-- choose its recurrence;
-- choose whether it appears in the **Add bill** dropdown;
-- rename it;
-- change its recurrence;
-- disable it while keeping all previous bills;
-- delete it if it has never been used.
-
-Default examples include Internet, Electricity, Water, Gas, Condominium, Phone, TARI / Waste and Other. Water defaults to every 2 months and TARI / Waste to yearly.
+Existing v0.3 bills are preserved during migration. They are intentionally not assigned to a payer automatically because Billy cannot safely infer who paid historical entries. Edit an old bill if you want it included in split calculations.
 
 ## Dashboard card
 
-The card appears in the card picker as **Bill Tracker**. You can also add it manually:
+The card appears in the picker as **Billy - Bill Tracker**. It can also be added manually:
 
 ```yaml
 type: custom:bill-tracker-card
 title: Bollette di casa
-columns: 12
+columns: full
 recent: 10
 history_months: 12
 forecast_months: 12
 ```
 
-The graphical card editor lets you choose:
+`columns: full` requests the whole available Home Assistant Sections width. Numeric values are also supported.
 
-- title;
-- width from 1 to 12 Section columns;
-- number of recent bills displayed;
-- history months shown in the chart;
-- forecast horizon.
+If the dashboard already saved explicit Sections layout metadata, Home Assistant's own `grid_options` may override the card default. In that case set the card's layout to full width from the dashboard layout controls or YAML.
 
-## Adding a bill
+## PayPal.Me
 
-Press **+ Add bill** and choose:
+You can enter either a PayPal.Me username or a full PayPal.Me URL in the payer settings. Billy stores only the PayPal.Me handle and builds links in this form:
 
-- bill type;
-- payment month;
-- amount;
-- competence start/end;
-- optional note.
+`https://paypal.me/<handle>/<amount>EUR`
 
-The competence range is prefilled from the type recurrence. For example, a bimonthly Water bill paid in August is initially assigned to July–August, while a yearly bill gets a 12-month competence range. You can edit the range before saving.
+The user still confirms and completes the payment on PayPal. No PayPal credentials, API keys or payment data are stored by Billy.
 
-## Forecast model
+## Migration
 
-Forecasting is performed separately for each enabled bill type:
-
-1. Bill Tracker finds the most recent payment for that type.
-2. The configured recurrence determines the next expected payment month(s).
-3. The amount is estimated from recent bills of the same type with a conservative trend correction.
-4. Category estimates are combined into the monthly forecast.
-
-This means a yearly TARI bill can create an expected yearly peak without being incorrectly treated as a monthly payment.
-
-The **Monthly cost** view also estimates a normalized recurring cost by dividing each expected bill by its recurrence interval.
-
-Forecasts are indicative estimates, not guaranteed future charges.
+Storage schema v4 automatically migrates v0.3 data. Bill history, categories, recurrence and competence periods are preserved. Historical bills without payer information remain excluded from split balances until edited.
 
 ## Requirements
 
@@ -118,10 +99,7 @@ Forecasts are indicative estimates, not guaranteed future charges.
 
 ## Validation
 
-The repository includes GitHub Actions for:
-
-- HACS validation;
-- Home Assistant Hassfest validation.
+The repository includes GitHub Actions for HACS validation and Home Assistant Hassfest validation.
 
 ## License
 

@@ -1,63 +1,31 @@
 {
   "title": "Bill Tracker",
   "config": {
-    "abort": {
-      "already_configured": "Bill Tracker is already configured."
-    },
-    "step": {
-      "user": {
-        "title": "Bill Tracker",
-        "description": "Create the local bill database and enable the dashboard card."
-      }
-    }
+    "abort": {"already_configured": "Bill Tracker is already configured."},
+    "step": {"user": {"title": "Bill Tracker", "description": "Create the local bill database and enable the dashboard card."}}
   },
   "options": {
     "abort": {
       "not_setup": "Bill Tracker is not loaded. Restart Home Assistant and try again.",
-      "category_not_found": "The selected bill type no longer exists."
+      "category_not_found": "The selected bill type no longer exists.",
+      "payer_not_found": "The selected payer no longer exists."
     },
     "error": {
-      "invalid_category": "Check the name and recurrence. A bill type with this name may already exist.",
-      "category_in_use": "This bill type has history and cannot be deleted. Disable it instead."
+      "invalid_category": "Check the bill type data. The name, recurrence, default payer or color may be invalid.",
+      "category_in_use": "This bill type has history and cannot be deleted. Disable it instead.",
+      "invalid_payer": "Check payer name and default share. A payer with this name may already exist.",
+      "payer_in_use": "This payer is referenced by bills, bill defaults or settlements. Disable the payer instead."
     },
     "step": {
-      "init": {
-        "title": "Bill Tracker settings",
-        "menu_options": {
-          "add_category": "Add bill type",
-          "manage_category": "Manage bill types",
-          "done": "Done"
-        }
-      },
-      "add_category": {
-        "title": "Add bill type",
-        "description": "Choose the name, recurrence and whether it appears in the bill selection list.",
-        "data": {
-          "name": "Name",
-          "interval_months": "Recurrence",
-          "enabled": "Show in bill selection list"
-        }
-      },
-      "manage_category": {
-        "title": "Manage bill type",
-        "data": {
-          "category_id": "Bill type",
-          "action": "Action"
-        }
-      },
-      "edit_category": {
-        "title": "Edit bill type",
-        "description": "Disabling a bill type hides it from new entries without deleting its history.",
-        "data": {
-          "name": "Name",
-          "interval_months": "Recurrence",
-          "enabled": "Show in bill selection list"
-        }
-      },
-      "delete_category": {
-        "title": "Delete {name}",
-        "description": "Only bill types with no history can be deleted."
-      }
+      "init": {"title": "Bill Tracker settings", "menu_options": {"add_payer": "Add payer", "manage_payer": "Manage payers", "add_category": "Add bill type", "manage_category": "Manage bill types", "done": "Done"}},
+      "add_payer": {"title": "Add payer", "description": "The default share is used as a weight when Billy automatically splits a bill between active payers.", "data": {"name": "Name", "share_percent": "Default share (%)", "paypal_me": "PayPal.Me username or link", "enabled": "Use for new bills"}},
+      "manage_payer": {"title": "Manage payer", "data": {"payer_id": "Payer", "action": "Action"}},
+      "edit_payer": {"title": "Edit payer", "description": "Disabling a payer keeps all history but removes the payer from new automatic splits.", "data": {"name": "Name", "share_percent": "Default share (%)", "paypal_me": "PayPal.Me username or link", "enabled": "Use for new bills"}},
+      "delete_payer": {"title": "Delete {name}", "description": "Only a payer that has never been referenced can be deleted."},
+      "add_category": {"title": "Add bill type", "description": "Choose recurrence, default payer and the color used in stacked spending charts.", "data": {"name": "Name", "interval_months": "Recurrence", "default_payer_id": "Default payer", "color": "Chart color (#RRGGBB)", "enabled": "Show in bill selection list"}},
+      "manage_category": {"title": "Manage bill type", "data": {"category_id": "Bill type", "action": "Action"}},
+      "edit_category": {"title": "Edit bill type", "description": "The default payer is preselected when adding this bill. Disabling the type keeps its history.", "data": {"name": "Name", "interval_months": "Recurrence", "default_payer_id": "Default payer", "color": "Chart color (#RRGGBB)", "enabled": "Show in bill selection list"}},
+      "delete_category": {"title": "Delete {name}", "description": "Only bill types with no history can be deleted."}
     }
   }
 }

@@ -1,63 +1,31 @@
 {
   "title": "Bill Tracker",
   "config": {
-    "abort": {
-      "already_configured": "Bill Tracker è già configurato."
-    },
-    "step": {
-      "user": {
-        "title": "Bill Tracker",
-        "description": "Crea il database locale delle bollette e abilita la scheda per la dashboard."
-      }
-    }
+    "abort": {"already_configured": "Bill Tracker è già configurato."},
+    "step": {"user": {"title": "Bill Tracker", "description": "Crea il database locale delle bollette e abilita la scheda per la dashboard."}}
   },
   "options": {
     "abort": {
       "not_setup": "Bill Tracker non è caricato. Riavvia Home Assistant e riprova.",
-      "category_not_found": "Il tipo di bolletta selezionato non esiste più."
+      "category_not_found": "Il tipo di bolletta selezionato non esiste più.",
+      "payer_not_found": "Il pagante selezionato non esiste più."
     },
     "error": {
-      "invalid_category": "Controlla nome e periodicità. Potrebbe esistere già una bolletta con questo nome.",
-      "category_in_use": "Questa bolletta ha uno storico e non può essere eliminata. Disattivala invece."
+      "invalid_category": "Controlla i dati della bolletta: nome, periodicità, pagatore predefinito o colore potrebbero non essere validi.",
+      "category_in_use": "Questa bolletta ha uno storico e non può essere eliminata. Disattivala invece.",
+      "invalid_payer": "Controlla nome e quota predefinita. Potrebbe esistere già un pagante con questo nome.",
+      "payer_in_use": "Questo pagante è usato da bollette, impostazioni o rimborsi. Disattivalo invece di eliminarlo."
     },
     "step": {
-      "init": {
-        "title": "Impostazioni Bill Tracker",
-        "menu_options": {
-          "add_category": "Aggiungi tipo di bolletta",
-          "manage_category": "Gestisci tipi di bolletta",
-          "done": "Fine"
-        }
-      },
-      "add_category": {
-        "title": "Aggiungi tipo di bolletta",
-        "description": "Scegli nome, periodicità e se deve comparire tra le scelte quando aggiungi una bolletta.",
-        "data": {
-          "name": "Nome",
-          "interval_months": "Periodicità",
-          "enabled": "Mostra tra le scelte"
-        }
-      },
-      "manage_category": {
-        "title": "Gestisci tipo di bolletta",
-        "data": {
-          "category_id": "Tipo di bolletta",
-          "action": "Azione"
-        }
-      },
-      "edit_category": {
-        "title": "Modifica tipo di bolletta",
-        "description": "Disattivandola non comparirà più tra le nuove scelte, ma lo storico resterà intatto.",
-        "data": {
-          "name": "Nome",
-          "interval_months": "Periodicità",
-          "enabled": "Mostra tra le scelte"
-        }
-      },
-      "delete_category": {
-        "title": "Elimina {name}",
-        "description": "Puoi eliminare solo tipi di bolletta senza storico."
-      }
+      "init": {"title": "Impostazioni Bill Tracker", "menu_options": {"add_payer": "Aggiungi pagante", "manage_payer": "Gestisci paganti", "add_category": "Aggiungi tipo di bolletta", "manage_category": "Gestisci tipi di bolletta", "done": "Fine"}},
+      "add_payer": {"title": "Aggiungi pagante", "description": "La quota predefinita viene usata come peso quando Billy divide automaticamente una bolletta tra i paganti attivi.", "data": {"name": "Nome", "share_percent": "Quota predefinita (%)", "paypal_me": "Username o link PayPal.Me", "enabled": "Usa nelle nuove bollette"}},
+      "manage_payer": {"title": "Gestisci pagante", "data": {"payer_id": "Pagante", "action": "Azione"}},
+      "edit_payer": {"title": "Modifica pagante", "description": "Disattivandolo mantieni tutto lo storico ma non verrà incluso nelle nuove divisioni automatiche.", "data": {"name": "Nome", "share_percent": "Quota predefinita (%)", "paypal_me": "Username o link PayPal.Me", "enabled": "Usa nelle nuove bollette"}},
+      "delete_payer": {"title": "Elimina {name}", "description": "Puoi eliminare solo un pagante che non è mai stato utilizzato."},
+      "add_category": {"title": "Aggiungi tipo di bolletta", "description": "Scegli periodicità, pagatore predefinito e colore usato nel grafico stacked.", "data": {"name": "Nome", "interval_months": "Periodicità", "default_payer_id": "Pagatore predefinito", "color": "Colore grafico (#RRGGBB)", "enabled": "Mostra tra le scelte"}},
+      "manage_category": {"title": "Gestisci tipo di bolletta", "data": {"category_id": "Tipo di bolletta", "action": "Azione"}},
+      "edit_category": {"title": "Modifica tipo di bolletta", "description": "Il pagatore predefinito viene preselezionato quando aggiungi questa bolletta. Disattivandola lo storico resta intatto.", "data": {"name": "Nome", "interval_months": "Periodicità", "default_payer_id": "Pagatore predefinito", "color": "Colore grafico (#RRGGBB)", "enabled": "Mostra tra le scelte"}},
+      "delete_category": {"title": "Elimina {name}", "description": "Puoi eliminare solo tipi di bolletta senza storico."}
     }
   }
 }
