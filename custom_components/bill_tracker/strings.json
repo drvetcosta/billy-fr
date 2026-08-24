@@ -1,0 +1,63 @@
+{
+  "title": "Bill Tracker",
+  "config": {
+    "abort": {
+      "already_configured": "Bill Tracker is already configured."
+    },
+    "step": {
+      "user": {
+        "title": "Bill Tracker",
+        "description": "Create the local bill database and enable the dashboard card."
+      }
+    }
+  },
+  "options": {
+    "abort": {
+      "not_setup": "Bill Tracker is not loaded. Restart Home Assistant and try again.",
+      "category_not_found": "The selected bill type no longer exists."
+    },
+    "error": {
+      "invalid_category": "Check the name and recurrence. A bill type with this name may already exist.",
+      "category_in_use": "This bill type has history and cannot be deleted. Disable it instead."
+    },
+    "step": {
+      "init": {
+        "title": "Bill Tracker settings",
+        "menu_options": {
+          "add_category": "Add bill type",
+          "manage_category": "Manage bill types",
+          "done": "Done"
+        }
+      },
+      "add_category": {
+        "title": "Add bill type",
+        "description": "Choose the name, recurrence and whether it appears in the bill selection list.",
+        "data": {
+          "name": "Name",
+          "interval_months": "Recurrence",
+          "enabled": "Show in bill selection list"
+        }
+      },
+      "manage_category": {
+        "title": "Manage bill type",
+        "data": {
+          "category_id": "Bill type",
+          "action": "Action"
+        }
+      },
+      "edit_category": {
+        "title": "Edit bill type",
+        "description": "Disabling a bill type hides it from new entries without deleting its history.",
+        "data": {
+          "name": "Name",
+          "interval_months": "Recurrence",
+          "enabled": "Show in bill selection list"
+        }
+      },
+      "delete_category": {
+        "title": "Delete {name}",
+        "description": "Only bill types with no history can be deleted."
+      }
+    }
+  }
+}

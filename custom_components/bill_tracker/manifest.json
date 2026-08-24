@@ -1,0 +1,19 @@
+{
+  "domain": "bill_tracker",
+  "name": "Bill Tracker",
+  "codeowners": [
+    "@robin994"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "frontend",
+    "http"
+  ],
+  "documentation": "https://github.com/robin994/HomeAssistant-Bill-Tracker",
+  "integration_type": "service",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/robin994/HomeAssistant-Bill-Tracker/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "0.3.0"
+}

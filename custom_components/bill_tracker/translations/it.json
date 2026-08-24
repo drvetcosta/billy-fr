@@ -1,0 +1,63 @@
+{
+  "title": "Bill Tracker",
+  "config": {
+    "abort": {
+      "already_configured": "Bill Tracker è già configurato."
+    },
+    "step": {
+      "user": {
+        "title": "Bill Tracker",
+        "description": "Crea il database locale delle bollette e abilita la scheda per la dashboard."
+      }
+    }
+  },
+  "options": {
+    "abort": {
+      "not_setup": "Bill Tracker non è caricato. Riavvia Home Assistant e riprova.",
+      "category_not_found": "Il tipo di bolletta selezionato non esiste più."
+    },
+    "error": {
+      "invalid_category": "Controlla nome e periodicità. Potrebbe esistere già una bolletta con questo nome.",
+      "category_in_use": "Questa bolletta ha uno storico e non può essere eliminata. Disattivala invece."
+    },
+    "step": {
+      "init": {
+        "title": "Impostazioni Bill Tracker",
+        "menu_options": {
+          "add_category": "Aggiungi tipo di bolletta",
+          "manage_category": "Gestisci tipi di bolletta",
+          "done": "Fine"
+        }
+      },
+      "add_category": {
+        "title": "Aggiungi tipo di bolletta",
+        "description": "Scegli nome, periodicità e se deve comparire tra le scelte quando aggiungi una bolletta.",
+        "data": {
+          "name": "Nome",
+          "interval_months": "Periodicità",
+          "enabled": "Mostra tra le scelte"
+        }
+      },
+      "manage_category": {
+        "title": "Gestisci tipo di bolletta",
+        "data": {
+          "category_id": "Tipo di bolletta",
+          "action": "Azione"
+        }
+      },
+      "edit_category": {
+        "title": "Modifica tipo di bolletta",
+        "description": "Disattivandola non comparirà più tra le nuove scelte, ma lo storico resterà intatto.",
+        "data": {
+          "name": "Nome",
+          "interval_months": "Periodicità",
+          "enabled": "Mostra tra le scelte"
+        }
+      },
+      "delete_category": {
+        "title": "Elimina {name}",
+        "description": "Puoi eliminare solo tipi di bolletta senza storico."
+      }
+    }
+  }
+}
